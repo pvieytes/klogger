@@ -1,0 +1,12 @@
+{application, ituklog,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { ituklog_app, []}},
+  {env, []}
+ ]}.
