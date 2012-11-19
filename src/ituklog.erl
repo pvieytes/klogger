@@ -27,8 +27,14 @@
 
 %% API
 -export([start/0,
-	 stop/0]).
+	 stop/0,
+	 add_logger/2,
+	 set_log_level/2,
+	 log/3]).
 
+
+
+-define(LOGGERSERVER(Id, Params), {Id, {ituklog_logger, start_link, [Params]}, permanent, 5000, worker, dynamic}).
 
 %% ===================================================================
 %% API
@@ -57,3 +63,55 @@ start()->
 %%--------------------------------------------------------------------
 stop()->
     application:stop(?MODULE).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% add logger to the app
+%%
+%% @spec add_logger(Logger::atom(), BackendSpecs::[backend()]) -> ok | {error | Error}
+%%
+%% @end
+%%--------------------------------------------------------------------
+add_logger(Logger, BackendSpecs)->
+    LoggerServerSpecs =?LOGGERSERVER(Logger, {Logger, BackendSpecs}),
+    case supervisor:start_child(ituklog_sup, LoggerServerSpecs) of
+	{ok, _Pid} -> ok;
+	Error -> Error
+    end.
+    
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%%
+%% @spec set_log_level(Logger::atom(), List::[{backend::atom(), Level::integer}]) -> ok | {error | Error}
+%%
+%% @end
+%%--------------------------------------------------------------------
+set_log_level(Logger, List) ->
+    gen_server:call(Logger, {set_log_level, List}).
+
+	    
+	    
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%%
+%% @spec log(Logger::atom(), Msg::string()) -> ok | {error | Error}
+%%
+%% @end
+%%--------------------------------------------------------------------
+log(Logger, Action, Msg) ->
+    Logger:log(Action, Msg).
+
+	    
+%% ===================================================================
+%% Internal functions
+%% ===================================================================
+
