@@ -22,7 +22,7 @@
 %% Created : 19 Nov 2012 by Pablo Vieytes <pvieytes@openshine.com>
 %%-------------------------------------------------------------------
 
--module(ituklog_app).
+-module(klogger_app).
 
 -behaviour(application).
 
@@ -34,7 +34,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    ituklog_sup:start_link().
+    klogger_sup:start_link().
 
 stop(_State) ->
     ok.

@@ -23,7 +23,7 @@
 %%-------------------------------------------------------------------
 
 
--module(ituklog_logger).
+-module(klogger_logger).
 
 -behaviour(gen_server).
 
@@ -166,7 +166,6 @@ set_log_level(State, List) ->
     _StoredBackends = State#state.backends,
     Name = State#state.name,
     CodeString = get_code(Name, List),
-    %% io:format("dbg code: ~p~n", [CodeString]),
     {Module,Code} = dynamic_compile:from_string(CodeString),
     case  code:load_binary(Module, atom_to_list(Name) ++ ".erl", Code) of
     	{error, _Error}=E->
@@ -179,7 +178,6 @@ get_code(LoggerName, List)->
     ModuleStr = atom_to_list(LoggerName),
     ListStr = create_list(List),
     "-module(" ++ ModuleStr ++ ").
-     %%-include(\"include/ituklog.hrl\").
      -export([log/2,
               create_log_msg/3,
               action_to_code/1]).  

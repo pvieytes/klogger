@@ -22,7 +22,7 @@
 %% Created : 19 Nov 2012 by Pablo Vieytes <pvieytes@openshine.com>
 %%-------------------------------------------------------------------
 
--module(ituklog_sup).
+-module(klogger_sup).
 
 -behaviour(supervisor).
 

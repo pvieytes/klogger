@@ -22,7 +22,7 @@
 %% Created : 19 Nov 2012 by Pablo Vieytes <pvieytes@openshine.com>
 %%-------------------------------------------------------------------
 
--module(ituklog).
+-module(klogger).
 
 
 %% API
@@ -34,7 +34,7 @@
 
 
 
--define(LOGGERSERVER(Id, Params), {Id, {ituklog_logger, start_link, [Params]}, permanent, 5000, worker, dynamic}).
+-define(LOGGERSERVER(Id, Params), {Id, {klogger_logger, start_link, [Params]}, permanent, 5000, worker, dynamic}).
 
 %% ===================================================================
 %% API
@@ -43,7 +43,7 @@
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% start ituklog application
+%% start klogger application
 %%
 %% @spec start() -> ok | {error | Error}
 %%
@@ -55,7 +55,7 @@ start()->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% stop ituklog application
+%% stop klogger application
 %%
 %% @spec stop() -> ok | {error | Error}
 %%
@@ -76,7 +76,7 @@ stop()->
 %%--------------------------------------------------------------------
 add_logger(Logger, BackendSpecs)->
     LoggerServerSpecs =?LOGGERSERVER(Logger, {Logger, BackendSpecs}),
-    case supervisor:start_child(ituklog_sup, LoggerServerSpecs) of
+    case supervisor:start_child(klogger_sup, LoggerServerSpecs) of
 	{ok, _Pid} -> ok;
 	Error -> Error
     end.
