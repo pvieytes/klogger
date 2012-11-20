@@ -40,7 +40,8 @@
 -define(SERVER, ?MODULE). 
 
 -record(state, {name, 
-		backends}).
+		backends,
+		log_files}).
 
 %%%===================================================================
 %%% API
@@ -74,8 +75,27 @@ start_link({LoggerName, BackendSpecs}) ->
 %% @end
 %%--------------------------------------------------------------------
 init([{LoggerName, BackendSpecs}]) ->
-    {ok, #state{name=LoggerName,
-		backends=BackendSpecs}}.
+    {Backends, LogFiles} = 
+	lists:foldl(
+	  fun({file_backend, BackendName, Path, LogLevel}, {B, F}) ->
+		  case open_log_file(Path) of
+		      {ok, File} ->
+			  BList = [{BackendName, file_backend, LogLevel}|B],
+			  FList = [{BackendName, File}|F],
+			  {BList, FList}
+		  end;
+	     ({console_backend, BackendName, LogLevel}, {B,F}) ->
+		  BList =  [{BackendName, console_backend, LogLevel}|B],
+		  {BList, F}
+	  end,
+	  {[], []},
+	  BackendSpecs),
+
+    State = #state{name=LoggerName,
+		backends=Backends,
+		log_files = LogFiles},
+    set_log_level(State, Backends),
+    {ok, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -164,21 +184,24 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-set_log_level(State, List) ->
-    _StoredBackends = State#state.backends,
+set_log_level(State, Backends) ->
+   AllBackends = 
+	case State#state.backends of
+	    Backends ->	Backends;
+	    StoredBackends -> Backends
+	end,
     Name = State#state.name,
-    CodeString = get_code(Name, List),
+    CodeString = get_code(Name, AllBackends),
     {Module,Code} = dynamic_compile:from_string(CodeString),
-    case  code:load_binary(Module, atom_to_list(Name) ++ ".erl", Code) of
-    	{error, _Error}=E->
-    	    E;
-    	_ -> ok
+    case code:load_binary(Module, atom_to_list(Name) ++ ".erl", Code) of
+    	{error, _} = E-> E;
+    	_ -> ok 
     end.
 
    
-get_code(LoggerName, List)->
+get_code(LoggerName, Backends)->
     ModuleStr = atom_to_list(LoggerName),
-    ListStr = create_list(List),
+    ListStr = create_list(Backends),
     "-module(" ++ ModuleStr ++ ").
      -export([log/2,
               create_log_msg/3,
@@ -227,14 +250,13 @@ get_code(LoggerName, List)->
                       end,
 
          lists:foreach(
-             fun({'console_log_backend', BackendLevel}) when ActionCode =< BackendLevel  ->
+             fun({_, 'console_backend', BackendLevel}) when ActionCode =< BackendLevel  ->
                     io:format(\"~s~n\", [create_log_msg(ActionCode, Msg, now())]);
-                ({'console_log_backend', _Level})->
-                    io:format(\"dbg console ActionLevel: ~p; BackendLevel: ~p~n\", [ActionCode,  _Level]),
+                ({_, 'console_backend', _Level})->
                     ok;
-                ({Backend, BackendLevel}) when ActionCode =< BackendLevel ->
+                ({Backend, file_backend, BackendLevel}) when ActionCode =< BackendLevel ->
                     gen_server:cast(" ++ ModuleStr ++ ", {log, Backend, ActionCode, Msg, now()});
-                (_Else) ->
+                ({Backend, file_backend, BackendLevel}) ->
                     ok
              end,
              List). 
@@ -256,12 +278,18 @@ get_code(LoggerName, List)->
 create_list(L)->
     "[" ++ create_list_loop(L, "") ++ "]".
 
-create_list_loop([{BackEnd, Level}|[]], Acc)->
-    B = atom_to_list(BackEnd),
+create_list_loop([{Name, Type, Level}|[]], Acc)->
+    T = atom_to_list(Type),
+    N = atom_to_list(Name),
     L = lists:flatten(io_lib:format("~p", [Level])),
-    Acc ++ "{'" ++ B ++ "', " ++ L ++ "}";
+    Acc ++ "{'" ++ N ++ "', '" ++ T ++ "', " ++ L ++ "}";
 
-create_list_loop([{BackEnd, Level}|Rest], Acc) ->
-    B = atom_to_list(BackEnd),
+create_list_loop([{Name, Type, Level}|Rest], Acc) ->
+    T = atom_to_list(Type),
+    N = atom_to_list(Name),
     L = lists:flatten(io_lib:format("~p", [Level])),
-    "{'" ++ B ++ "', " ++ L ++ "}, " ++ create_list_loop(Rest, Acc).
+    "{'" ++ N ++ "', '" ++ T ++ "', " ++ L ++ "}, " ++ create_list_loop(Rest, Acc).
+
+
+open_log_file(Path) -> {ok, Path}.
+     

@@ -24,17 +24,19 @@
 
 -module(klogger).
 
+-include_lib("klogger/include/klogger.hrl").
 
 %% API
 -export([start/0,
 	 stop/0,
+	 add_logger/1,
 	 add_logger/2,
 	 set_log_level/2,
 	 log/3]).
 
 
 
--define(LOGGERSERVER(Id, Params), {Id, {klogger_logger, start_link, [Params]}, permanent, 5000, worker, dynamic}).
+-define(LOGGERCHILD(Id, Params), {Id, {klogger_logger, start_link, [Params]}, permanent, 5000, worker, dynamic}).
 
 %% ===================================================================
 %% API
@@ -70,12 +72,26 @@ stop()->
 %% @doc
 %% add logger to the app
 %%
+%% @spec add_logger(Logger::atom()) -> ok | {error | Error}
+%%
+%% @end
+%%--------------------------------------------------------------------
+add_logger(Logger)->
+    BackendSpecs = [{console_backend, console_log, ?DEBUG}],
+    add_logger(Logger, BackendSpecs).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% add logger to the app
+%%
 %% @spec add_logger(Logger::atom(), BackendSpecs::[backend()]) -> ok | {error | Error}
 %%
 %% @end
 %%--------------------------------------------------------------------
 add_logger(Logger, BackendSpecs)->
-    LoggerServerSpecs =?LOGGERSERVER(Logger, {Logger, BackendSpecs}),
+    Params = {Logger, BackendSpecs},
+    LoggerServerSpecs =?LOGGERCHILD(Logger, Params),
     case supervisor:start_child(klogger_sup, LoggerServerSpecs) of
 	{ok, _Pid} -> ok;
 	Error -> Error
