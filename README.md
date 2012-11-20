@@ -30,7 +30,7 @@ klogger:start().
 
 
 No logger is started by default, so, at least one should be added to start to log.
-If no options are given when is added, it will have console backend and the higher log level (everything will be showed).
+If no options are given when is added, it will have console backend and the higher log level (every message will be showed).
 
 ```erlang
 klogger:add_logger(logger).
@@ -39,9 +39,8 @@ logger:debug("text message").
 The logger name ('logger' in this case) must be an atom. You should be careful with this name. 
 Some code will be compiled dynamicaly and loaded as logger name, so this could override some existing module.
 
-Options is a tuple or list of tuples.
 
-For console backend:
+Options for console backend:
 ```erlang
 { 
     console_backend, 
@@ -51,7 +50,7 @@ For console backend:
 ```
 
 
-For file backend:
+Options for file backend:
 ```erlang
 { 
     file_backend, 
@@ -60,18 +59,22 @@ For file backend:
     LogLevel:: integer() 
 }
 ```
-There are defined some log level macros in include/klogger.hrl file.
+There are defined log level macros in include/klogger.hrl file.
 
 
 Add new logger with options:
 
 ```erlang
 Options = [{file_backend, file_log, "/tmp/test.log", ?WARNING},
-           {console_backend, console_log, ?DEBUG}]
+           {console_backend, console_log, ?DEBUG}].
 klogger:add_logger(logger, Options).
 ```
 
+Log level can be change at runtime.
 
+```erlang
+klogger:set_log_level(logger, {file_log, ?DEBUG}).
+```
 
 ## License <a name="license"></a>
 
