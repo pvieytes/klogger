@@ -22,10 +22,12 @@
 %% Created : 19 Nov 2012 by Pablo Vieytes <pvieytes@openshine.com>
 %%-------------------------------------------------------------------
 
-
 -module(klogger_logger).
 
 -behaviour(gen_server).
+
+-include_lib("klogger/include/klogger.hrl").
+
 
 %% API
 -export([start_link/1
@@ -180,17 +182,57 @@ get_code(LoggerName, List)->
     "-module(" ++ ModuleStr ++ ").
      -export([log/2,
               create_log_msg/3,
-              action_to_code/1]).  
+              debug/1,
+              info/1,
+              warning/1,
+              error/1,
+              fatal/1
+            ]).  
+
+     -define(DEBUG, "++ lists:flatten(io_lib:format("~p", [?DEBUG])) ++ ").
+     -define(INFO, "++ lists:flatten(io_lib:format("~p", [?INFO])) ++ ").
+     -define(WARNING, "++ lists:flatten(io_lib:format("~p", [?WARNING]))  ++ ").
+     -define(ERROR, "++ lists:flatten(io_lib:format("~p", [?ERROR])) ++ ").
+     -define(FATAL, "++ lists:flatten(io_lib:format("~p", [?FATAL])) ++ ").
+     -define(NONE, "++ lists:flatten(io_lib:format("~p", [?NONE])) ++ ").
+
+
+     -define(LEVELCODE(Level),
+        case Level of
+            debug -> ?DEBUG;
+            info -> ?INFO;
+            warning -> ?WARNING;
+            error -> ?ERROR;
+            fatal -> ?FATAL;
+            none -> ?NONE
+        end).
+
+
+       debug(Msg) -> log(?DEBUG, Msg).
+
+       info(Msg) -> log(?INFO, Msg).
+
+       warning(Msg) -> log(?WARNING, Msg). 
+
+       error(Msg) -> log(?ERROR, Msg).
+
+       fatal(Msg) -> log(?FATAL, Msg).
+
       
       log(Action, Msg) ->
          List = " ++ ListStr ++ ",
-         ActionCode = action_to_code(Action),
+         ActionCode = case Action of
+                         Action when is_atom(Action) -> ?LEVELCODE(Action);
+                         Action -> Action
+                      end,
+
          lists:foreach(
-             fun({'console_log_backend', BackendLevel}) when ActionCode >= BackendLevel  ->
+             fun({'console_log_backend', BackendLevel}) when ActionCode =< BackendLevel  ->
                     io:format(\"~s~n\", [create_log_msg(ActionCode, Msg, now())]);
                 ({'console_log_backend', _Level})->
+                    io:format(\"dbg console ActionLevel: ~p; BackendLevel: ~p~n\", [ActionCode,  _Level]),
                     ok;
-                ({Backend, BackendLevel}) when ActionCode >= BackendLevel ->
+                ({Backend, BackendLevel}) when ActionCode =< BackendLevel ->
                     gen_server:cast(" ++ ModuleStr ++ ", {log, Backend, ActionCode, Msg, now()});
                 (_Else) ->
                     ok
@@ -199,26 +241,16 @@ get_code(LoggerName, List)->
 
       create_log_msg(ActionCode, Msg, TimeStamp) ->
           H = case ActionCode of
-                  1 -> \"DBG\";
-                  2 -> \"INFO\";
-                  3 -> \"WARN\";
-                  4 -> \"ERROR\";
-                  5 -> \"** FATAL**\"
+                   ?DEBUG  -> \"DBG\";
+                   ?INFO -> \"INFO\";
+                   ?WARNING  -> \"WARN\";
+                   ?ERROR  -> \"ERROR\";
+                   ?FATAL  -> \"** FATAL**\"
                end,
           {{Y, Mt, D}, {Ho, Mn, S}} = calendar:now_to_local_time(TimeStamp),
           Date = lists:flatten(io_lib:format(\"~p/~p/~p - ~p:~p:~p\" , [D, Mt, Y, Ho, Mn, S])),
           lists:flatten(io_lib:format(\"~s - ~s -- ~s\", [H, Date, Msg])).
 
-      action_to_code(Action) ->
-         case Action of
-             Action when is_integer(Action) -> Action;
-             nothing -> 0;
-             debug -> 1;
-             info -> 2;
-             warn -> 3;
-             error -> 4;
-             fatal -> 5
-       end.
       ".
 
 create_list(L)->
