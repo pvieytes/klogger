@@ -29,8 +29,8 @@ klogger:start().
 ```
 
 
-No logger is started by default, so, at least one should be added to start to log.
-If no options are given when is added, it will have console backend and the higher log level (every message will be showed).
+Klogger is multi logger application, but no logger is started by default, so, at least one should be added to start to log. You can add as many as you want to.
+If no options are given when a logger is added, it will have console backend and the higher log level (every message will be showed).
 
 ```erlang
 klogger:add_logger(logger).
