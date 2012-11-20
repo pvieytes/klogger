@@ -89,13 +89,11 @@ init([{LoggerName, BackendSpecs}]) ->
 		  {BList, F}
 	  end,
 	  {[], []},
-	  BackendSpecs),
-
-    State = #state{name=LoggerName,
+	  BackendSpecs),   
+    compile_logger(LoggerName, Backends),
+    {ok, #state{name=LoggerName,
 		backends=Backends,
-		log_files = LogFiles},
-    set_log_level(State, Backends),
-    {ok, State}.
+		log_files = LogFiles}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -111,10 +109,36 @@ init([{LoggerName, BackendSpecs}]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({set_log_level, List}, _From, State) ->
-    _Reply = set_log_level(State, List),
-    {reply, ok, State};
-
+handle_call({set_log_level, NewLevels}, _From, State) ->
+    StoredBackends = State#state.backends,
+    io:format("dbg stored backends: ~p~n", [StoredBackends]),
+    Right = lists:all(
+	      fun({Name, Level}) when is_integer(Level);
+	      			      Level >= ?DEBUG;
+	      			      Level =< ?FATAL ->
+		      case lists:keyfind(Name, 1, StoredBackends) of
+			  false -> false;
+			  _ -> true
+		      end;
+		 (_) ->
+		      false
+	      end,
+	      NewLevels),
+    case Right of
+	true ->
+	    NewBackends = 
+		lists:foldl(
+		  fun({Name, Level}, Acc) ->
+			  {Name, Type, _L} = lists:keyfind(Name, 1, Acc),
+			  [{Name, Type, Level}|lists:keydelete(Name, 1, Acc)]
+		  end,
+		  StoredBackends,
+		  NewLevels),	    
+	    compile_logger(State#state.name, NewBackends),
+	    {reply, ok, State#state{backends=NewBackends}};
+	_ ->
+	    {reply, {error, "backend name  or level is not valid"}, State}
+    end;	
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -184,14 +208,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-set_log_level(State, Backends) ->
-   AllBackends = 
-	case State#state.backends of
-	    Backends ->	Backends;
-	    StoredBackends -> Backends
-	end,
-    Name = State#state.name,
-    CodeString = get_code(Name, AllBackends),
+compile_logger(Name, Backends) ->
+    CodeString = get_code(Name, Backends),
     {Module,Code} = dynamic_compile:from_string(CodeString),
     case code:load_binary(Module, atom_to_list(Name) ++ ".erl", Code) of
     	{error, _} = E-> E;

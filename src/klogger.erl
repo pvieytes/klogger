@@ -108,11 +108,12 @@ add_logger(Logger, BackendSpecs)->
 %%
 %% @end
 %%--------------------------------------------------------------------
+set_log_level(Logger, Tuple) when is_tuple(Tuple) ->
+    set_log_level(Logger, [Tuple]);
+
 set_log_level(Logger, List) ->
     gen_server:call(Logger, {set_log_level, List}).
 
-	    
-	    
 
 %%--------------------------------------------------------------------
 %% @private
