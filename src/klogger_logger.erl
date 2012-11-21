@@ -45,6 +45,34 @@
 
 -define(SERVER, ?MODULE). 
 
+
+-define(DAYNAME(D),
+	case D of
+	    1 -> "Mon";
+	    2 -> "Tue";
+	    3 -> "Wed";
+	    4 -> "Thr";
+	    5 -> "Fri";
+	    6 -> "Sat";
+	    7 -> "Sun"
+	end).
+
+-define(MONTHNAME(M),
+	case M of
+	    1 -> "Jan";
+	    2 -> "Feb";
+	    3 -> "Mar";
+	    4 -> "Apr";
+	    5 -> "May";
+	    6 -> "Jun";
+	    7 -> "Jul";
+	    8 -> "Aug";
+	    9 -> "Sep";
+	    10 -> "Oct";
+	    11 -> "Nov";
+	    12 -> "Dec"
+	end).		
+
 -record(state, {name, 
 		backends,
 		log_files}).
@@ -198,7 +226,7 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 terminate(_Reason, State) ->
     %% close files
-    lists:foreach(fun({_, F}) -> file:close(F) end, State#state.log_files),
+    lists:foreach(fun({_, F}) -> close_log_file(F) end, State#state.log_files),
     %% unload logger mod
     code:delete(State#state.name),    
     ok.
@@ -291,30 +319,59 @@ do_log(Action, Msg, Backends, LoggerName) ->
 	      nolog;
 	 ({Backend, file_backend, BackendLevel}) when ActionCode =< BackendLevel ->
 	      gen_server:cast(LoggerName, {log, Backend, ActionCode, Msg, now()});
-	 ({Backend, file_backend, _BackendLevel}) ->
+	 ({_Backend, file_backend, _BackendLevel}) ->
 	      nolog
       end,
       Backends).
 
 create_log_msg(ActionCode, Msg, TimeStamp) ->
-    H = 
+    Act = 
 	case ActionCode of
 	    ?DEBUG  -> "DBG";
 	    ?INFO -> "INFO";
 	    ?WARNING  -> "WARN";
-	    ?ERROR  -> "ERROR";
-	    ?FATAL  -> "** FATAL**"
+	    ?ERROR  -> "*ERROR*";
+	    ?FATAL  -> "**FATAL**"
 	end,
     {{Y, Mt, D}, {Ho, Mn, S}} = calendar:now_to_local_time(TimeStamp),
-    Date = lists:flatten(io_lib:format("~p/~p/~p - ~p:~p:~p" , [D, Mt, Y, Ho, Mn, S])),
-    lists:flatten(io_lib:format("~s - ~s -- ~s", [H, Date, Msg])).
+    DayName = ?DAYNAME(calendar:day_of_the_week(Y, Mt, D)),
+    MonthName = ?MONTHNAME(Mt),
+    Seg = 
+	case S of
+	    S when S < 10 -> 
+		lists:flatten(io_lib:format("0~p", [S]));
+	    _ ->
+		lists:flatten(io_lib:format("~p", [S]))
+	end,
+    {_, _, Micro} = TimeStamp,
+    Mili = 
+	case trunc(Micro/1000) of
+	    M when M < 10 ->
+		lists:flatten(io_lib:format("00~p", [M]));		       
+	    M when M < 100 ->
+		lists:flatten(io_lib:format("0~p", [M]));	
+	    M when M < 1000 ->
+		lists:flatten(io_lib:format("~p", [M]))
+	end,
+    Date = lists:flatten(io_lib:format("~s ~s ~p ~p:~p:~s ~s" , [DayName, MonthName, Y, Ho, Mn, Seg, Mili])),
+    lists:flatten(io_lib:format("[~s] [~s]  ~s", [Date, Act, Msg])).
 
 
 %% file log 
 %%=========================================
 
 open_log_file(Path) -> 
-    file:open(Path, [write, append, raw]).
+    Opts = [{name, test_name},
+	    {format, external},
+	    {file, Path}],
+    case disk_log:open(Opts) of
+	{ok, Log} -> {ok, Log};
+	{repaired, Log, _, _} -> {ok, Log};
+	Else -> Else
+    end.
 
-write_msg(F, LogMsg)->
-    file:write(F, list_to_binary(LogMsg ++ "\n")).
+write_msg(Log, LogMsg)->
+    disk_log:blog_terms(Log, [LogMsg++"\n"]).
+
+close_log_file(Log) ->
+    disk_log:close(Log).
