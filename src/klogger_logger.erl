@@ -75,6 +75,7 @@ start_link({LoggerName, BackendSpecs}) ->
 %% @end
 %%--------------------------------------------------------------------
 init([{LoggerName, BackendSpecs}]) ->
+    process_flag(trap_exit, true),
     {Backends, LogFiles} = 
 	lists:foldl(
 	  fun({file_backend, BackendName, Path, LogLevel}, {B, F}) ->
@@ -111,7 +112,6 @@ init([{LoggerName, BackendSpecs}]) ->
 %%--------------------------------------------------------------------
 handle_call({set_log_level, NewLevels}, _From, State) ->
     StoredBackends = State#state.backends,
-    io:format("dbg stored backends: ~p~n", [StoredBackends]),
     Right = lists:all(
 	      fun({Name, Level}) when is_integer(Level);
 	      			      Level >= ?DEBUG;
@@ -160,7 +160,8 @@ handle_call(_Request, _From, State) ->
 handle_cast({log, Backend, ActionCode, Msg, TimeStamp}, State) ->
     Mod = State#state.name,
     LogMsg = Mod:create_log_msg(ActionCode, Msg, TimeStamp),
-    io:format("dbg backend: ~p -> msg: ~p~n", [Backend, LogMsg]),
+    F = proplists:get_value(Backend, State#state.log_files),
+    file:write(F, list_to_binary(LogMsg ++ "\n")),
     {noreply, State};
 
 handle_cast(_Msg, State) ->
@@ -190,7 +191,10 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
+terminate(_Reason, State) ->
+    %% close files
+    lists:foreach(fun({_, F}) -> file:close(F) end, State#state.log_files),
+    code:delete(State#state.name),    
     ok.
 
 %%--------------------------------------------------------------------
@@ -309,5 +313,6 @@ create_list_loop([{Name, Type, Level}|Rest], Acc) ->
     "{'" ++ N ++ "', '" ++ T ++ "', " ++ L ++ "}, " ++ create_list_loop(Rest, Acc).
 
 
-open_log_file(Path) -> {ok, Path}.
+open_log_file(Path) -> 
+    file:open(Path, [write, append, raw]).
      
