@@ -31,3 +31,14 @@
 -define(NONE, 0).
 
 
+
+
+-define(LEVELCODE(L),
+	case L of
+	    debug -> ?DEBUG;
+	    info -> ?INFO;
+	    warning -> ?WARNING;
+	    error -> ?ERROR;
+	    fatal -> ?FATAL;
+	    none -> ?NONE
+	end).

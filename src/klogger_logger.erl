@@ -33,6 +33,12 @@
 -export([start_link/1
 	 ]).
 
+
+
+%% Logger funs
+-export([do_log/4
+	 ]).
+
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
@@ -158,10 +164,9 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 
 handle_cast({log, Backend, ActionCode, Msg, TimeStamp}, State) ->
-    Mod = State#state.name,
-    LogMsg = Mod:create_log_msg(ActionCode, Msg, TimeStamp),
+    LogMsg = create_log_msg(ActionCode, Msg, TimeStamp),
     F = proplists:get_value(Backend, State#state.log_files),
-    file:write(F, list_to_binary(LogMsg ++ "\n")),
+    write_msg(F, LogMsg),
     {noreply, State};
 
 handle_cast(_Msg, State) ->
@@ -194,6 +199,7 @@ handle_info(_Info, State) ->
 terminate(_Reason, State) ->
     %% close files
     lists:foreach(fun({_, F}) -> file:close(F) end, State#state.log_files),
+    %% unload logger mod
     code:delete(State#state.name),    
     ok.
 
@@ -212,6 +218,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+
+%% compile new logger
+%%=========================================
+ 
 compile_logger(Name, Backends) ->
     CodeString = get_code(Name, Backends),
     {Module,Code} = dynamic_compile:from_string(CodeString),
@@ -220,13 +230,11 @@ compile_logger(Name, Backends) ->
     	_ -> ok 
     end.
 
-   
 get_code(LoggerName, Backends)->
     ModuleStr = atom_to_list(LoggerName),
-    ListStr = create_list(Backends),
+    BackendsString = backends_to_str(Backends),
     "-module(" ++ ModuleStr ++ ").
-     -export([log/2,
-              create_log_msg/3,
+     -export([log/2,          
               debug/1,
               info/1,
               warning/1,
@@ -234,85 +242,79 @@ get_code(LoggerName, Backends)->
               fatal/1
             ]).  
 
-     -define(DEBUG, "++ lists:flatten(io_lib:format("~p", [?DEBUG])) ++ ").
-     -define(INFO, "++ lists:flatten(io_lib:format("~p", [?INFO])) ++ ").
-     -define(WARNING, "++ lists:flatten(io_lib:format("~p", [?WARNING]))  ++ ").
-     -define(ERROR, "++ lists:flatten(io_lib:format("~p", [?ERROR])) ++ ").
-     -define(FATAL, "++ lists:flatten(io_lib:format("~p", [?FATAL])) ++ ").
-     -define(NONE, "++ lists:flatten(io_lib:format("~p", [?NONE])) ++ ").
-
-
-     -define(LEVELCODE(Level),
-        case Level of
-            debug -> ?DEBUG;
-            info -> ?INFO;
-            warning -> ?WARNING;
-            error -> ?ERROR;
-            fatal -> ?FATAL;
-            none -> ?NONE
-        end).
-
-
-       debug(Msg) -> log(?DEBUG, Msg).
-
-       info(Msg) -> log(?INFO, Msg).
-
-       warning(Msg) -> log(?WARNING, Msg). 
-
-       error(Msg) -> log(?ERROR, Msg).
-
-       fatal(Msg) -> log(?FATAL, Msg).
+       debug(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?DEBUG])) ++ ", Msg).
+       info(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?INFO])) ++ ", Msg).
+       warning(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?WARNING])) ++ ", Msg).
+       error(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?ERROR])) ++ ", Msg).
+       fatal(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?FATAL])) ++ ", Msg).
 
       
-      log(Action, Msg) ->
-         List = " ++ ListStr ++ ",
-         ActionCode = case Action of
-                         Action when is_atom(Action) -> ?LEVELCODE(Action);
-                         Action -> Action
-                      end,
-
-         lists:foreach(
-             fun({_, 'console_backend', BackendLevel}) when ActionCode =< BackendLevel  ->
-                    io:format(\"~s~n\", [create_log_msg(ActionCode, Msg, now())]);
-                ({_, 'console_backend', _Level})->
-                    ok;
-                ({Backend, file_backend, BackendLevel}) when ActionCode =< BackendLevel ->
-                    gen_server:cast(" ++ ModuleStr ++ ", {log, Backend, ActionCode, Msg, now()});
-                ({Backend, file_backend, BackendLevel}) ->
-                    ok
-             end,
-             List). 
-
-      create_log_msg(ActionCode, Msg, TimeStamp) ->
-          H = case ActionCode of
-                   ?DEBUG  -> \"DBG\";
-                   ?INFO -> \"INFO\";
-                   ?WARNING  -> \"WARN\";
-                   ?ERROR  -> \"ERROR\";
-                   ?FATAL  -> \"** FATAL**\"
-               end,
-          {{Y, Mt, D}, {Ho, Mn, S}} = calendar:now_to_local_time(TimeStamp),
-          Date = lists:flatten(io_lib:format(\"~p/~p/~p - ~p:~p:~p\" , [D, Mt, Y, Ho, Mn, S])),
-          lists:flatten(io_lib:format(\"~s - ~s -- ~s\", [H, Date, Msg])).
-
+       log(Action, Msg) ->
+           Backends = " ++ BackendsString ++ ",
+           " ++ atom_to_list(?MODULE) ++":do_log(Action, Msg, Backends, " ++ ModuleStr ++ ").
       ".
 
-create_list(L)->
-    "[" ++ create_list_loop(L, "") ++ "]".
 
-create_list_loop([{Name, Type, Level}|[]], Acc)->
+backends_to_str(L)->
+    "[" ++ backends_to_str_loop(L, "") ++ "]".
+
+backends_to_str_loop([{Name, Type, Level}|[]], Acc)->
     T = atom_to_list(Type),
     N = atom_to_list(Name),
     L = lists:flatten(io_lib:format("~p", [Level])),
     Acc ++ "{'" ++ N ++ "', '" ++ T ++ "', " ++ L ++ "}";
 
-create_list_loop([{Name, Type, Level}|Rest], Acc) ->
+backends_to_str_loop([{Name, Type, Level}|Rest], Acc) ->
     T = atom_to_list(Type),
     N = atom_to_list(Name),
     L = lists:flatten(io_lib:format("~p", [Level])),
-    "{'" ++ N ++ "', '" ++ T ++ "', " ++ L ++ "}, " ++ create_list_loop(Rest, Acc).
+    "{'" ++ N ++ "', '" ++ T ++ "', " ++ L ++ "}, " ++ backends_to_str_loop(Rest, Acc).
 
+%% logging 
+%%=========================================
+
+do_log(Action, Msg, Backends, LoggerName) ->
+    ActionCode = 
+	case Action of
+	    Action when is_atom(Action) -> ?LEVELCODE(Action);
+	    Action when 
+		  is_integer(Action),
+		  Action >= ?NONE,
+		  Action =< ?DEBUG ->
+		Action
+	end,
+    lists:foreach(
+      fun({_Backend, console_backend, BackendLevel}) when ActionCode =< BackendLevel  ->
+	      LogMsg = create_log_msg(ActionCode, Msg, now()),
+	      io:format("~p~n", [LogMsg]);
+	 ({_, 'console_backend', _Level})->
+	      nolog;
+	 ({Backend, file_backend, BackendLevel}) when ActionCode =< BackendLevel ->
+	      gen_server:cast(LoggerName, {log, Backend, ActionCode, Msg, now()});
+	 ({Backend, file_backend, _BackendLevel}) ->
+	      nolog
+      end,
+      Backends).
+
+create_log_msg(ActionCode, Msg, TimeStamp) ->
+    H = 
+	case ActionCode of
+	    ?DEBUG  -> "DBG";
+	    ?INFO -> "INFO";
+	    ?WARNING  -> "WARN";
+	    ?ERROR  -> "ERROR";
+	    ?FATAL  -> "** FATAL**"
+	end,
+    {{Y, Mt, D}, {Ho, Mn, S}} = calendar:now_to_local_time(TimeStamp),
+    Date = lists:flatten(io_lib:format("~p/~p/~p - ~p:~p:~p" , [D, Mt, Y, Ho, Mn, S])),
+    lists:flatten(io_lib:format("~s - ~s -- ~s", [H, Date, Msg])).
+
+
+%% file log 
+%%=========================================
 
 open_log_file(Path) -> 
     file:open(Path, [write, append, raw]).
-     
+
+write_msg(F, LogMsg)->
+    file:write(F, list_to_binary(LogMsg ++ "\n")).
