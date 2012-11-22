@@ -76,17 +76,15 @@ set_log_level(Logger, NewLevels)->
 	PreviousBackends ->
 	    Right = 
 		lists:all(
-			  fun({Name, Level}) when is_integer(Level);
-						  Level >= ?DEBUG;
-						  Level =< ?FATAL ->
-				  case lists:keyfind(Name, 2, PreviousBackends) of
-				      false -> false;
-				      _ -> true
-				  end;
-			     (_) ->
-				  false
-			  end,
-			  NewLevels),
+		  fun({Name, _Level}) ->
+			  case lists:keyfind(Name, 2, PreviousBackends) of
+			      false -> false;
+			      _ -> true
+			  end;
+		     (_) ->
+			  false
+		  end,
+		  NewLevels),
 	    case Right of
 		false->
 		    {error, "backends lists is not valid"};
@@ -96,9 +94,9 @@ set_log_level(Logger, NewLevels)->
 			  fun({Name, Level}, Acc) ->
 				  case lists:keyfind(Name, 2, Acc) of
 				      {Type, Name, _OldLevel, Path} ->
-					  [{Type, Name, Level, Path}|lists:keydelete(Name, 2, Acc)];
+					  [{Type, Name, ?LEVELCODE(Level), Path}|lists:keydelete(Name, 2, Acc)];
 				      {Type, Name, _OldLevel} ->
-					 [{Type, Name, Level}|lists:keydelete(Name, 2, Acc)]
+					 [{Type, Name, ?LEVELCODE(Level)}|lists:keydelete(Name, 2, Acc)]
 				  end				 
 			  end,
 			  PreviousBackends,
@@ -185,13 +183,21 @@ get_code(LoggerName, Backends) ->
 %% @doc
 %% This funciton convert a list of backend info tuples in a string
 %%
-%% @spec backends_to_str([]) -> 
+%% @spec backends_to_str() -> 
 %%           string()
-%% backend() = {Name::atom(), , Level::integer()}
+%% 
 %% @end
 %%--------------------------------------------------------------------
-backends_to_str(L)->
-    "[" ++ backends_to_str_loop(L, "") ++ "]".
+backends_to_str(Backends)->
+    BackendsNumericLevels
+	= lists:map(
+	    fun({T, N, L, P}) ->
+		    {T, N, ?LEVELCODE(L), P};
+	       ({T, N, L}) ->
+		    {T, N, ?LEVELCODE(L)}
+	    end,
+	    Backends),	
+    "[" ++ backends_to_str_loop(BackendsNumericLevels, "") ++ "]".
 
 backends_to_str_loop([Tuple|[]], Acc)->
     Acc ++ convert_tuple_to_string(Tuple);
@@ -211,7 +217,6 @@ convert_tuple_to_string(Tuple)->
 	  tuple_to_list(Tuple)),
     "{" ++ string:join(List, ", ") ++ "}".     
 	     
-
 
 %% event server funs
 %%=========================================
@@ -241,18 +246,9 @@ add_handlers(LoggerName, Backends)->
 %%=========================================
 
 do_log(LoggerName, Action, Msg, Backends) ->
-    ActionCode = 
-	case Action of
-	    Action when is_atom(Action) -> ?LEVELCODE(Action);
-	    Action when 
-		  is_integer(Action),
-		  Action >= ?NONE,
-		  Action =< ?DEBUG ->
-		Action
-	end,
+    ActionCode =  ?LEVELCODE(Action),
     Log = 
 	fun(Event) -> 
-		%% io:format("dbg notify event: ~p~n", [Event]),
 		gen_event:notify(LoggerName, Event) 
 	end,
     lists:foreach(

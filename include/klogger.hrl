@@ -22,15 +22,12 @@
 %% Created : 20 Nov 2012 by Pablo Vieytes <pvieytes@openshine.com>
 %%-------------------------------------------------------------------
 
-
 -define(DEBUG, 5).
 -define(INFO, 4).
 -define(WARNING, 3).
 -define(ERROR, 2).
 -define(FATAL, 1).
 -define(NONE, 0).
-
-
 
 
 -define(LEVELCODE(L),
@@ -40,5 +37,7 @@
 	    warning -> ?WARNING;
 	    error -> ?ERROR;
 	    fatal -> ?FATAL;
-	    none -> ?NONE
+	    none -> ?NONE;
+	    L when is_integer(L),  L >= ?NONE,  L =< ?DEBUG ->
+		L		
 	end).

@@ -91,8 +91,6 @@ add_logger(Logger)->
 add_logger(Logger, BackendSpecs)->
     klogger_log:create_logger(Logger, BackendSpecs).
 
- 
-
 
 %%--------------------------------------------------------------------
 %% @private
