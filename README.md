@@ -45,7 +45,7 @@ Options for console backend:
 { 
     console_backend, 
     BackendName::atom(),
-    LogLevel:: integer() 
+    LogLevel:: integer() | atom()
 }
 ```
 
@@ -55,18 +55,37 @@ Options for file backend:
 { 
     file_backend, 
     BackendName::atom(),
-    FilePath::string(),
-    LogLevel:: integer() 
+    LogLevel:: integer() | atom(),
+    FilePath::string()
+
 }
 ```
-There are defined log level macros in include/klogger.hrl file.
+
+Log level could be:
+* a integer (use the macros defined in include/klogger.hrl file):
+  * ```?DEBUG```
+  * ```?INFO```
+  * ```?WARNING```
+  * ```?ERROR```
+  * ```?FATAL```
+  * ```?NONE``` 
+
+
+
+* an atom:
+ * ```debug```
+ * ```info```
+ * ```warning```
+ * ```error```
+ * ```fatal```
+ * ```none```
 
 
 Add new logger with options:
 
 ```erlang
-Options = [{file_backend, file_log, "/tmp/test.log", ?WARNING},
-           {console_backend, console_log, ?DEBUG}].
+Options = [{file_backend, file_log, ?ERROR, "/tmp/test.log"},
+           {console_backend, console_log, debug}]
 klogger:add_logger(logger, Options).
 ```
 
