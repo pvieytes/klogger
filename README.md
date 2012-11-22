@@ -37,7 +37,7 @@ klogger:add_logger(logger).
 logger:debug("text message").
 ```
 The logger name ('logger' in this case) must be an atom. You should be careful with this name. 
-Some code will be compiled dynamicaly and loaded as logger name, so this could override some existing module.
+Some code will be compiled dynamically and loaded as logger name, so this could override some existing module.
 
 
 Options for console backend:

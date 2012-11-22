@@ -31,8 +31,7 @@
 	 stop/0,
 	 add_logger/1,
 	 add_logger/2,
-	 set_log_level/2,
-	 log/3]).
+	 set_log_level/2]).
 
 
 
@@ -90,13 +89,9 @@ add_logger(Logger)->
 %% @end
 %%--------------------------------------------------------------------
 add_logger(Logger, BackendSpecs)->
-    Params = {Logger, BackendSpecs},
-    LoggerServerSpecs =?LOGGERCHILD(Logger, Params),
-    case supervisor:start_child(klogger_sup, LoggerServerSpecs) of
-	{ok, _Pid} -> ok;
-	Error -> Error
-    end.
-    
+    klogger_log:create_logger(Logger, BackendSpecs).
+
+ 
 
 
 %%--------------------------------------------------------------------
@@ -111,26 +106,6 @@ add_logger(Logger, BackendSpecs)->
 set_log_level(Logger, Tuple) when is_tuple(Tuple) ->
     set_log_level(Logger, [Tuple]);
 
-set_log_level(Logger, List) ->
-    gen_server:call(Logger, {set_log_level, List}).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%%
-%% @spec log(Logger::atom(), Msg::string()) -> ok | {error | Error}
-%%
-%% @end
-%%--------------------------------------------------------------------
-log(Logger, Action, Msg) ->
-    Logger:log(Action, Msg).
-
-
-
-
-%% ===================================================================
-%% Internal functions
-%% ===================================================================
+set_log_level(Logger, LevelList) ->
+    klogger_log:set_log_level(Logger, LevelList).
 
