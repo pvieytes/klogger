@@ -16,7 +16,8 @@
 %% @author Pablo Vieytes <pvieytes@openshine.com>
 %% @copyright (C) 2012, Openshine S.L.
 %% @doc
-%% Functions to crate dynamically the logger code
+%%
+%% Functions to crate dynamically the logger code and create log events
 %%
 %% @end
 %% Created : 22 Nov 2012 by Pablo Vieytes <pvieytes@openshine.com>
@@ -105,11 +106,6 @@ set_log_level(Logger, NewLevels)->
 	    end
     end.
 		    
-
-
-
-
-
 
 %%%===================================================================
 %%% Internal functions
@@ -233,10 +229,12 @@ convert_tuple_to_string(Tuple)->
 %%--------------------------------------------------------------------
 add_handlers(LoggerName, Backends)->
     lists:foreach(
-      fun({file_backend, BackendName, _Level, Path})->
-	     ok = gen_event:add_handler(LoggerName, klogger_file_backend, [{LoggerName, BackendName, Path}]);
-	  ({console_backend,BackendName,_Level})->	     
-	     ok = gen_event:add_handler(LoggerName, klogger_console_backend, [{LoggerName, BackendName}])
+      fun({file_backend, Name, Level, Path})->
+	      Backend = #file_backend{name=Name, level=Level, path=Path},
+	      ok = gen_event:add_handler(LoggerName, klogger_handler, [LoggerName, Backend]);
+	 ({console_backend, Name, Level})->	     
+	      Backend = #console_backend{name=Name, level=Level},
+	      ok = gen_event:add_handler(LoggerName, klogger_handler, [LoggerName, Backend])
       end,
       Backends).
 

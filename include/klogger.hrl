@@ -41,3 +41,17 @@
 	    L when is_integer(L),  L >= ?NONE,  L =< ?DEBUG ->
 		L		
 	end).
+
+
+
+
+
+-record(file_backend, {name, 
+		       level,
+		       path,
+		       get_error_logger=disable}).
+
+-record(console_backend, {name,
+			  level,
+			  get_error_logger=disable}).
+

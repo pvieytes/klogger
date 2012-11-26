@@ -16,15 +16,17 @@
 %% @author Pablo Vieytes <pvieytes@openshine.com>
 %% @copyright (C) 2012, Openshine S.L.
 %% @doc
-%% Functions to crate dynamically the logger code
+%% gen_event handler
 %%
 %% @end
-%% Created : 22 Nov 2012 by Pablo Vieytes <pvieytes@openshine.com>
+%% Created : 26 Nov 2012 by Pablo Vieytes <pvieytes@openshine.com>
 %%-------------------------------------------------------------------
 
--module(klogger_file_backend).
+-module(klogger_handler).
 
 -behaviour(gen_event).
+
+-include_lib("klogger/include/klogger.hrl").
 
 %% gen_event callbacks
 -export([init/1, handle_event/2, handle_call/2, 
@@ -32,8 +34,12 @@
 
 -define(SERVER, ?MODULE). 
 
--record(state, {file,
-	       backendname}).
+
+-record(state, {name,
+		level,
+		backend,
+		file=[],
+		get_error_logger=false}).
 
 
 %%%===================================================================
@@ -49,15 +55,25 @@
 %% @spec init(Args) -> {ok, State}
 %% @end
 %%--------------------------------------------------------------------
-init([{LoggerName, BackendName, Path}]) ->
+init([LoggerName, Backend=#file_backend{}]) ->
     process_flag(trap_exit, true),
-    case open_log_file(Path, LoggerName, BackendName) of
+    case open_log_file(Backend#file_backend.path, LoggerName, Backend#file_backend.name) of
 	{ok, File} ->
-	    {ok, #state{backendname=BackendName,
+	    {ok, #state{name=Backend#file_backend.name,
+			level=Backend#file_backend.level,
+			backend=Backend,
 			file=File}};
 	{error, _} = E ->
 	    E
-    end.
+    end;
+
+init([_LoggerName, Backend=#console_backend{}]) ->
+    process_flag(trap_exit, true),
+    {ok, #state{name=Backend#console_backend.name,
+		level=Backend#console_backend.level,
+		backend=Backend}}.
+
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -72,15 +88,12 @@ init([{LoggerName, BackendName, Path}]) ->
 %%                          remove_handler
 %% @end
 %%--------------------------------------------------------------------
-handle_event({log, BackendName, ActionCode, Msg, TimeStamp}, State) ->
+handle_event({log, BackendName, ActionCode, Msg, TimeStamp}, State=#state{name=BackendName}) ->   
+    log(ActionCode, Msg, TimeStamp, State),
+    {ok, State};
 
-    if
-	BackendName == 	State#state.backendname ->
-	   LogMsg = klogger_msg:create_log_msg(ActionCode, Msg, TimeStamp),
-	   write_msg(State#state.file, LogMsg);
-	true ->
-	    ignore
-    end,
+handle_event({error_logger_event, Event}, State=#state{get_error_logger=true}) ->   
+    manage_error_logger_event(Event, State),
     {ok, State};
 
 handle_event(_Event, State) ->
@@ -116,6 +129,9 @@ handle_call(_Request, State) ->
 %%                         remove_handler
 %% @end
 %%--------------------------------------------------------------------
+handle_info({get_error_logger, BackendName}, State=#state{name=BackendName}) ->
+    {ok, State#state{get_error_logger=true}};
+
 handle_info(_Info, State) ->
     {ok, State}.
 
@@ -130,8 +146,13 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, State) ->
-    %% close file
-    close_log_file(State#state.file),
+    case State#state.backend of
+	_Backend = #file_backend{} ->  
+	    %% close file
+	    close_log_file(State#state.file);
+	_ ->
+	    ok
+    end,
     ok.
 
 %%--------------------------------------------------------------------
@@ -145,9 +166,90 @@ terminate(_Reason, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+log(ActionCode, Msg, TimeStamp, State) ->    
+    LogMsg = klogger_msg:create_log_msg(ActionCode, Msg, TimeStamp),
+    case State#state.backend of
+	_Backend = #file_backend{} ->
+	    write_msg_on_disk(State#state.file, LogMsg);
+	_Backend = #console_backend{} ->
+	    io:format("~s~n", [LogMsg])
+    end.
+
+manage_error_logger_event(Event, State) ->
+    %% Msg = lists:flatten(io_lib:format("~p", [Event])),			
+    %% Msg =" something in error_logger",
+    case Event of
+	{Error, _, Data} when Error == error; 
+			      Error == error_report  ->
+	    if 
+		State#state.level >= ?ERROR ->
+		    Msg = create_error_logger_msg(Data),
+		    log(?ERROR, Msg, now(), State);
+		true -> 
+		    ok
+	    end;
+	{Warning, _, Data} when Warning == warning_msg; 
+				Warning == warning_report ->
+	    if 
+		State#state.level >= ?WARNING ->
+		    Msg = create_error_logger_msg(Data),
+		    log(?WARNING, Msg, now(), State);
+		true -> 
+		    ok
+	    end;
+	{Info, _, Data} when Info == info_msg; 
+			     Info == info_report ->
+	    if 
+		State#state.level >= ?INFO ->
+		    Msg = create_error_logger_msg(Data),
+		    log(?INFO, Msg, now(), State);
+		true -> 
+		    ok
+	    end;
+
+	_ ->
+	    ignore	
+    end.
+
+
+
+create_error_logger_msg(Data) ->
+    %% lists:flatten(io_lib:format("~p", [Data])).
+    Spaces = "             ",
+    case Data of
+    	{_, Std, List} when 
+    	      Std == std_error;
+    	      Std == std_warning;
+    	      Std == std_info ->
+    	    lists:foldl(
+    	      fun({F, D}, Acc) ->
+    		      Acc ++ lists:flatten(io_lib:format("~n~s~p: ~p", [Spaces, F, D]));
+    		 (Term, Acc) -> 
+    		      Acc ++  lists:flatten(io_lib:format("~n~s~p", [Spaces, Term]))
+    	      end,
+    	      "",
+    	      List);
+    	{_, F, D} ->
+    	    lists:flatten(io_lib:format(F, D))
+    end.
+
+
+
+
+
+
+
+
+%%%===================================================================
+%%% File backend - Internal functions
+%%%===================================================================
+
 
 %% file log 
 %%=========================================
@@ -162,7 +264,7 @@ open_log_file(Path, LoggerName, BackendName) ->
 	Else -> Else
     end.
 
-write_msg(Log, LogMsg)->
+write_msg_on_disk(Log, LogMsg)->
     disk_log:blog_terms(Log, [LogMsg++"\n"]).
 
 close_log_file(Log) ->

@@ -27,7 +27,7 @@
 -behaviour(application).
 
 %% Application callbacks
--export([start/2, stop/1]).
+-export([start/2, prep_stop/1, stop/1]).
 
 %% ===================================================================
 %% Application callbacks
@@ -35,6 +35,18 @@
 
 start(_StartType, _StartArgs) ->
     klogger_sup:start_link().
+
+prep_stop(State) ->
+    %% delete handler from error_logger
+    gen_event:delete_handler(error_logger, error_logger_klogger_handler, []),
+    %% delete loggers modules
+    lists:foreach(fun({Mod, _, _, _}) ->
+			  code:delete(Mod)
+		  end,
+		  supervisor:which_children(klogger_sup)),	     
+    ok.
+
+
 
 stop(_State) ->
     ok.
