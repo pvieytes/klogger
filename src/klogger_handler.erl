@@ -19,12 +19,14 @@
 %% gen_event handler
 %%
 %% @end
-%% Created : 22 Nov 2012 by Pablo Vieytes <pvieytes@openshine.com>
+%% Created : 26 Nov 2012 by Pablo Vieytes <pvieytes@openshine.com>
 %%-------------------------------------------------------------------
 
--module(klogger_console_backend).
+-module(klogger_handler).
 
 -behaviour(gen_event).
+
+-include_lib("klogger/include/klogger.hrl").
 
 %% gen_event callbacks
 -export([init/1, handle_event/2, handle_call/2, 
@@ -33,10 +35,13 @@
 -define(SERVER, ?MODULE). 
 
 
--
+-record(file_backend_state, {name,
+			     backend,
+			     file}).
 
--record(state, {backendname,
-		get_error_logger_backends=[]}).
+-record(console_backend_state, {name,
+				backend}).
+
 
 %%%===================================================================
 %%% gen_event callbacks
@@ -51,8 +56,23 @@
 %% @spec init(Args) -> {ok, State}
 %% @end
 %%--------------------------------------------------------------------
-init([{_LoggerName, BackendName}]) ->
-    {ok, #state{backendname=BackendName}}.
+init([LoggerName, Backend=#file_backend{}]) ->
+    process_flag(trap_exit, true),
+    case open_log_file(Backend#file_backend.path, LoggerName, Backend#file_backend.name) of
+	{ok, File} ->
+	    {ok, #file_backend_state{name=Backend#file_backend.name,
+				     backend=Backend,
+				     file=File}};
+	{error, _} = E ->
+	    E
+    end;
+
+init([_LoggerName, Backend=#console_backend{}]) ->
+    process_flag(trap_exit, true),
+    {ok, #console_backend_state{name=Backend#console_backend.name,
+			     backend=Backend}}.
+
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -67,9 +87,19 @@ init([{_LoggerName, BackendName}]) ->
 %%                          remove_handler
 %% @end
 %%--------------------------------------------------------------------
-handle_event({log, BackendName, ActionCode, Msg, TimeStamp}, State) ->
+handle_event({log, BackendName, ActionCode, Msg, TimeStamp}, State=#file_backend_state{}) ->
     if
-	BackendName == 	State#state.backendname ->
+	BackendName == 	State#file_backend_state.name ->
+	    LogMsg = klogger_msg:create_log_msg(ActionCode, Msg, TimeStamp),
+	    write_msg(State#file_backend_state.file, LogMsg);
+	true ->
+	    ignore
+    end,
+    {ok, State};
+
+handle_event({log, BackendName, ActionCode, Msg, TimeStamp}, State=#console_backend_state{}) ->
+    if
+	BackendName == 	State#console_backend_state.name ->
 	    LogMsg = klogger_msg:create_log_msg(ActionCode, Msg, TimeStamp),
 	    io:format("~s~n", [LogMsg]);
 	true ->
@@ -77,15 +107,6 @@ handle_event({log, BackendName, ActionCode, Msg, TimeStamp}, State) ->
     end,
     {ok, State};
 
-handle_event({error_logger_event, Event}, State) ->
-    case State#state.get_error_logger of
-	true ->
-	    %%io:format("dbg  error_logger -> klogger backend: ~p~n", [Event]),
-	    ok;
-	false ->
-	    ignore
-    end,
-    {ok, State}; 
 
 handle_event(_Event, State) ->
     {ok, State}.
@@ -120,14 +141,6 @@ handle_call(_Request, State) ->
 %%                         remove_handler
 %% @end
 %%--------------------------------------------------------------------
-handle_info({get_error_logger, Backend}, State) ->
-    NewBackends = 
-	case lists:member(Backend, State#state.get_error_logger_backends) of
-	    false -> [Backend | State#state{get_error_logger_backends}];
-	    true -> State#state{get_error_logger_backends}
-	end				      
-    {ok, State#state{get_error_logger_backends=NewBackends}};
-
 handle_info(_Info, State) ->
     {ok, State}.
 
@@ -141,9 +154,13 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
-    ok.
+terminate(_Reason, State=#file_backend_state{}) ->
+    %% close file
+    close_log_file(State#file_backend_state.file),
+    ok;
 
+terminate(_Reason, _State=#console_backend_state{}) ->
+    ok.
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -155,6 +172,27 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+
 %%%===================================================================
-%%% Internal functions
+%%% File backend - Internal functions
 %%%===================================================================
+
+
+%% file log 
+%%=========================================
+
+open_log_file(Path, LoggerName, BackendName) -> 
+    Opts = [{name, lists:concat([LoggerName, "_", BackendName])},
+	    {format, external},
+	    {file, Path}],
+    case disk_log:open(Opts) of
+	{ok, Log} -> {ok, Log};
+	{repaired, Log, _, _} -> {ok, Log};
+	Else -> Else
+    end.
+
+write_msg(Log, LogMsg)->
+    disk_log:blog_terms(Log, [LogMsg++"\n"]).
+
+close_log_file(Log) ->
+    disk_log:close(Log).
