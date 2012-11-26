@@ -63,33 +63,6 @@ init([]) ->
 %%                          remove_handler
 %% @end
 %%--------------------------------------------------------------------
-%% handle_event({error, _Gleader, {_Pid, _Format, _Data}}, State) ->
-%%     {ok, State};
-
-%% handle_event({error_report, _Gleader, {_Pid, std_error, _Report}}, State) ->
-%%     {ok, State};
-
-%% handle_event({error_report, _Gleader, {_Pid, _Type, _Report}}, State) ->
-%%     {ok, State};
-
-%% handle_event({warning_msg, _Gleader, {_Pid, _Format, _Data}}, State) ->
-%%     {ok, State};
-
-%% handle_event({warning_report, _Gleader, {_Pid, std_warning, _Report}}, State) ->
-%%     {ok, State};
-
-%% handle_event({warning_report, _Gleader, {_Pid, _Type, _Report}}, State) ->
-%%     {ok, State};
-
-%% handle_event({info_msg, _Gleader, {_Pid, _Format, _Data}}, State) ->
-%%     {ok, State};
-
-%% handle_event({info_report, _Gleader, {_Pid, std_info, _Report}}, State) ->
-%%     {ok, State};
-
-%% handle_event({info_report, _Gleader, {_Pid, _Type, _Report}}, State) ->
-%%     {ok, State};
-
 handle_event(Event, State) ->
     lists:foreach(
       fun(Logger) ->
@@ -129,7 +102,13 @@ handle_call(_Request, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info({add_klogger, Logger}, State) ->
-    {ok, State#state{kloggers=[Logger| State#state.kloggers]}}.
+    Kloggers = State#state.kloggers,
+    case lists:member(Logger, Kloggers) of
+	true ->
+	     {ok, State};
+	false ->
+	    {ok, State#state{kloggers=[Logger| Kloggers]}}
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

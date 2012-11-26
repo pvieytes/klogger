@@ -38,6 +38,4 @@ general_test() ->
     ?assertMatch(ok, logger:info("text message")),
     ?assertMatch(ok, logger:warning("text message")),
     ?assertMatch(ok, logger:error("text message")),
-    ?assertMatch(ok, logger:fatal("text message")),
-    ?assertMatch(ok, klogger:stop()),
-    ?assertMatch(ok, ok).
+    ?assertMatch(ok, logger:fatal("text message")).

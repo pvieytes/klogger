@@ -108,10 +108,10 @@ set_log_level(Logger, Tuple) when is_tuple(Tuple) ->
 set_log_level(Logger, LevelList) ->
     klogger_log:set_log_level(Logger, LevelList).
 
-get_error_logger(Logger, Backend, Mode) ->
+get_error_logger(Logger, BackendName, Mode) ->
     %% check logger
     case code:is_loaded(Logger) of
-	true ->    
+	{file, _} ->    
 	    case Mode of
 		enable ->
 		    %% add the klogger handler to error_logger
@@ -124,7 +124,7 @@ get_error_logger(Logger, Backend, Mode) ->
 						  error_logger_klogger_handler, 
 						  [])
 		    end,	    
-		    Logger ! {get_error_logger, Backend},
+		    Logger ! {get_error_logger, BackendName},
 		    error_logger ! {add_klogger, Logger},
 		    ok;	  
 		disable ->
