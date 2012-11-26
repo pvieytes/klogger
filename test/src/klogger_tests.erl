@@ -28,4 +28,16 @@ start() ->
 
 general_test() ->
     ?debugMsg("General tests"),
-    ?assertMatch(true, true).
+    LogFilePath =  "./test.log",
+    %%delete previous logs
+    file:delete(LogFilePath),   
+    ?assertMatch(ok, klogger:start()),
+    Options = [{console_backend, console_log, debug}, {file_backend, file_log, debug, LogFilePath}],
+    ?assertMatch(ok, klogger:add_logger(logger, Options)),
+    ?assertMatch(ok, logger:debug("text message")),
+    ?assertMatch(ok, logger:info("text message")),
+    ?assertMatch(ok, logger:warning("text message")),
+    ?assertMatch(ok, logger:error("text message")),
+    ?assertMatch(ok, logger:fatal("text message")),
+    ?assertMatch(ok, klogger:stop()),
+    ?assertMatch(ok, ok).
