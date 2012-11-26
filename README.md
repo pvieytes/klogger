@@ -10,9 +10,8 @@ klogger
 
 ## What is klogger? <a name="about"></a>
 
-
-**klogger** is a erlang logger with console and file backend.
-
+**klogger** is a erlang app to create loggers with console and file backend. 
+Klogger can create more than one logger with diferents backends and log levels.
 
 
 ## Author <a name="author"></a>
