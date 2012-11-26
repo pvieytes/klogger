@@ -28,14 +28,40 @@ start() ->
 
 general_test() ->
     ?debugMsg("General tests"),
-    LogFilePath =  "./test.log",
+
     %%delete previous logs
+    LogFilePath =  "./test.log",
     file:delete(LogFilePath),   
+
+    %%start app
     ?assertMatch(ok, klogger:start()),
+
+    %% add logger
     Options = [{console_backend, console_log, debug}, {file_backend, file_log, debug, LogFilePath}],
+
+    %% logging
     ?assertMatch(ok, klogger:add_logger(logger, Options)),
     ?assertMatch(ok, logger:debug("text message")),
     ?assertMatch(ok, logger:info("text message")),
     ?assertMatch(ok, logger:warning("text message")),
     ?assertMatch(ok, logger:error("text message")),
-    ?assertMatch(ok, logger:fatal("text message")).
+    ?assertMatch(ok, logger:fatal("text message")),
+
+    %% error logger
+    ?debugMsg("error logger"),
+    ?assertMatch(ok, klogger:get_error_logger(logger, console_log, enable)),
+    ?assertMatch(ok, klogger:get_error_logger(logger, file_log, enable)),
+    error_logger:tty(false),
+    ?assertMatch(ok, error_logger:info_msg("info msg in error logger")),    
+    ?assertMatch(ok, error_logger:info_msg("info msg in error logger; data: ~p", [data_atom])),    
+    ?assertMatch(ok, error_logger:info_report([{info,data1},a_term,{tag2,data}])),    
+    ?assertMatch(ok, error_logger:warning_msg("warning msg in error logger")),
+    ?assertMatch(ok, error_logger:warning_msg("warning msg in error logger: ~p", [data_atom])),
+    ?assertMatch(ok, error_logger:warning_report([{warning,data1},a_term,{tag2,data}])),
+    ?assertMatch(ok, error_logger:error_msg("error msg in error logger")),
+    ?assertMatch(ok, error_logger:error_msg("error msg in error logger: ~p", [data_atom])),
+    ?assertMatch(ok, error_logger:error_report([{error,data1},a_term,{tag2,data}])),
+
+    %%stop klogger
+    ?assertMatch(ok, klogger:stop()).
+

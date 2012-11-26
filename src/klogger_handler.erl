@@ -183,6 +183,7 @@ log(ActionCode, Msg, TimeStamp, State) ->
 
 manage_error_logger_event(Event, State) ->
     %% Msg = lists:flatten(io_lib:format("~p", [Event])),			
+    %% Msg =" something in error_logger",
     case Event of
 	{Error, _, Data} when Error == error; 
 			      Error == error_report  ->
@@ -219,22 +220,23 @@ manage_error_logger_event(Event, State) ->
 
 
 create_error_logger_msg(Data) ->
+    %% lists:flatten(io_lib:format("~p", [Data])).
     Spaces = "             ",
     case Data of
-	{_, Std, List} when 
-	      Std == std_error;
-	      Std == std_warning;
-	      Std == std_info ->
-	    lists:foldl(
-	      fun({F, D}, Acc) ->
-		      Acc ++ lists:flatten(io_lib:format("~n~s~p: ~p", [Spaces, F, D]));
-		 (Term, Acc) -> 
-		      Acc ++  lists:flatten(io_lib:format("~n~s~p", [Spaces, Term]))
-	      end,
-	      "",
-	      List);
-	{_, F, D} ->
-	    lists:flatten(io_lib:format(F, D))
+    	{_, Std, List} when 
+    	      Std == std_error;
+    	      Std == std_warning;
+    	      Std == std_info ->
+    	    lists:foldl(
+    	      fun({F, D}, Acc) ->
+    		      Acc ++ lists:flatten(io_lib:format("~n~s~p: ~p", [Spaces, F, D]));
+    		 (Term, Acc) -> 
+    		      Acc ++  lists:flatten(io_lib:format("~n~s~p", [Spaces, Term]))
+    	      end,
+    	      "",
+    	      List);
+    	{_, F, D} ->
+    	    lists:flatten(io_lib:format(F, D))
     end.
 
 
