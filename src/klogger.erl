@@ -31,7 +31,8 @@
 	 stop/0,
 	 add_logger/1,
 	 add_logger/2,
-	 set_log_level/2]).
+	 set_log_level/2,
+	 get_error_logger/3]).
 
 
 
@@ -106,4 +107,32 @@ set_log_level(Logger, Tuple) when is_tuple(Tuple) ->
 
 set_log_level(Logger, LevelList) ->
     klogger_log:set_log_level(Logger, LevelList).
+
+get_error_logger(Logger, BackendName, Mode) ->
+    %% check logger
+    case code:is_loaded(Logger) of
+	{file, _} ->    
+	    case Mode of
+		enable ->
+		    %% add the klogger handler to error_logger
+		    case lists:member(error_logger_klogger_handler, 
+				      gen_event:which_handlers(error_logger)) of
+			true->
+			    ignore;
+			false ->
+			    gen_event:add_handler(error_logger, 
+						  error_logger_klogger_handler, 
+						  [])
+		    end,	    
+		    Logger ! {get_error_logger, BackendName},
+		    error_logger ! {add_klogger, Logger},
+		    ok;	  
+		disable ->
+
+		    ok
+	    end;
+	false ->
+	    {error, "logger not found"}
+    end.
+		
 
