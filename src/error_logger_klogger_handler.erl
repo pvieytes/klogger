@@ -16,13 +16,13 @@
 %% @author Pablo Vieytes <pvieytes@openshine.com>
 %% @copyright (C) 2012, Openshine S.L.
 %% @doc
-%% gen_event handler
+%%
 %%
 %% @end
 %% Created : 22 Nov 2012 by Pablo Vieytes <pvieytes@openshine.com>
 %%-------------------------------------------------------------------
 
--module(klogger_console_backend).
+-module(error_logger_klogger_handler).
 
 -behaviour(gen_event).
 
@@ -32,11 +32,7 @@
 
 -define(SERVER, ?MODULE). 
 
-
--
-
--record(state, {backendname,
-		get_error_logger_backends=[]}).
+-record(state, {kloggers=[]}).
 
 %%%===================================================================
 %%% gen_event callbacks
@@ -51,8 +47,8 @@
 %% @spec init(Args) -> {ok, State}
 %% @end
 %%--------------------------------------------------------------------
-init([{_LoggerName, BackendName}]) ->
-    {ok, #state{backendname=BackendName}}.
+init([]) ->
+    {ok, #state{}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -67,27 +63,39 @@ init([{_LoggerName, BackendName}]) ->
 %%                          remove_handler
 %% @end
 %%--------------------------------------------------------------------
-handle_event({log, BackendName, ActionCode, Msg, TimeStamp}, State) ->
-    if
-	BackendName == 	State#state.backendname ->
-	    LogMsg = klogger_msg:create_log_msg(ActionCode, Msg, TimeStamp),
-	    io:format("~s~n", [LogMsg]);
-	true ->
-	    ignore
-    end,
-    {ok, State};
+%% handle_event({error, _Gleader, {_Pid, _Format, _Data}}, State) ->
+%%     {ok, State};
 
-handle_event({error_logger_event, Event}, State) ->
-    case State#state.get_error_logger of
-	true ->
-	    %%io:format("dbg  error_logger -> klogger backend: ~p~n", [Event]),
-	    ok;
-	false ->
-	    ignore
-    end,
-    {ok, State}; 
+%% handle_event({error_report, _Gleader, {_Pid, std_error, _Report}}, State) ->
+%%     {ok, State};
 
-handle_event(_Event, State) ->
+%% handle_event({error_report, _Gleader, {_Pid, _Type, _Report}}, State) ->
+%%     {ok, State};
+
+%% handle_event({warning_msg, _Gleader, {_Pid, _Format, _Data}}, State) ->
+%%     {ok, State};
+
+%% handle_event({warning_report, _Gleader, {_Pid, std_warning, _Report}}, State) ->
+%%     {ok, State};
+
+%% handle_event({warning_report, _Gleader, {_Pid, _Type, _Report}}, State) ->
+%%     {ok, State};
+
+%% handle_event({info_msg, _Gleader, {_Pid, _Format, _Data}}, State) ->
+%%     {ok, State};
+
+%% handle_event({info_report, _Gleader, {_Pid, std_info, _Report}}, State) ->
+%%     {ok, State};
+
+%% handle_event({info_report, _Gleader, {_Pid, _Type, _Report}}, State) ->
+%%     {ok, State};
+
+handle_event(Event, State) ->
+    lists:foreach(
+      fun(Logger) ->
+	      gen_event:notify(Logger, {error_logger_event, Event})
+      end,
+      State#state.kloggers),
     {ok, State}.
 
 %%--------------------------------------------------------------------
@@ -120,16 +128,8 @@ handle_call(_Request, State) ->
 %%                         remove_handler
 %% @end
 %%--------------------------------------------------------------------
-handle_info({get_error_logger, Backend}, State) ->
-    NewBackends = 
-	case lists:member(Backend, State#state.get_error_logger_backends) of
-	    false -> [Backend | State#state{get_error_logger_backends}];
-	    true -> State#state{get_error_logger_backends}
-	end				      
-    {ok, State#state{get_error_logger_backends=NewBackends}};
-
-handle_info(_Info, State) ->
-    {ok, State}.
+handle_info({add_klogger, Logger}, State) ->
+    {ok, State#state{kloggers=[Logger| State#state.kloggers]}}.
 
 %%--------------------------------------------------------------------
 %% @private
