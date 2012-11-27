@@ -27,6 +27,8 @@
 -behaviour(gen_event).
 
 -include_lib("klogger/include/klogger.hrl").
+%% API
+-export([get_error_logger/3]).
 
 %% gen_event callbacks
 -export([init/1, handle_event/2, handle_call/2, 
@@ -39,7 +41,25 @@
 		level,
 		backend,
 		file=[],
-		get_error_logger=false}).
+		get_error_logger=disable, 
+		logger_name}).
+
+
+
+%%%===================================================================
+%%% gen_event callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% 
+%% @spec 
+%% @end
+%%--------------------------------------------------------------------
+get_error_logger(Logger, BackendName, Mode)->
+    Logger ! {get_error_logger, BackendName, Mode}.
+
 
 
 %%%===================================================================
@@ -59,18 +79,34 @@ init([LoggerName, Backend=#file_backend{}]) ->
     process_flag(trap_exit, true),
     case open_log_file(Backend#file_backend.path, LoggerName, Backend#file_backend.name) of
 	{ok, File} ->
+	    case Backend#file_backend.get_error_logger of
+		enable ->
+		    klogger_integration_error_logger(LoggerName, Backend#file_backend.get_error_logger);
+		_ ->
+		    ignore
+	    end,
 	    {ok, #state{name=Backend#file_backend.name,
 			level=Backend#file_backend.level,
 			backend=Backend,
+			get_error_logger=Backend#file_backend.get_error_logger,
+			logger_name=LoggerName,
 			file=File}};
 	{error, _} = E ->
 	    E
     end;
 
-init([_LoggerName, Backend=#console_backend{}]) ->
+init([LoggerName, Backend=#console_backend{}]) ->
     process_flag(trap_exit, true),
+    case Backend#console_backend.get_error_logger of
+	enable ->
+	    klogger_integration_error_logger(LoggerName, Backend#console_backend.get_error_logger);
+	_ ->
+	    ignore
+    end,
     {ok, #state{name=Backend#console_backend.name,
 		level=Backend#console_backend.level,
+		get_error_logger=Backend#console_backend.get_error_logger,
+		logger_name=LoggerName,
 		backend=Backend}}.
 
 
@@ -92,7 +128,7 @@ handle_event({log, BackendName, ActionCode, Msg, TimeStamp}, State=#state{name=B
     log(ActionCode, Msg, TimeStamp, State),
     {ok, State};
 
-handle_event({error_logger_event, Event}, State=#state{get_error_logger=true}) ->   
+handle_event({error_logger_event, Event}, State=#state{get_error_logger=enable}) ->   
     manage_error_logger_event(Event, State),
     {ok, State};
 
@@ -129,8 +165,15 @@ handle_call(_Request, State) ->
 %%                         remove_handler
 %% @end
 %%--------------------------------------------------------------------
-handle_info({get_error_logger, BackendName}, State=#state{name=BackendName}) ->
-    {ok, State#state{get_error_logger=true}};
+handle_info({get_error_logger, BackendName, Mode}, State=#state{name=BackendName}) ->
+    Status = State#state.get_error_logger,
+    case Mode of
+	Status ->
+	    {ok, State};
+	Mode ->
+	    klogger_integration_error_logger(State#state.logger_name, Mode),   
+	    {ok, State#state{get_error_logger=Mode}}
+    end;
 
 handle_info(_Info, State) ->
     {ok, State}.
@@ -182,8 +225,6 @@ log(ActionCode, Msg, TimeStamp, State) ->
     end.
 
 manage_error_logger_event(Event, State) ->
-    %% Msg = lists:flatten(io_lib:format("~p", [Event])),			
-    %% Msg =" something in error_logger",
     case Event of
 	{Error, _, Data} when Error == error; 
 			      Error == error_report  ->
@@ -217,10 +258,7 @@ manage_error_logger_event(Event, State) ->
 	    ignore	
     end.
 
-
-
 create_error_logger_msg(Data) ->
-    %% lists:flatten(io_lib:format("~p", [Data])).
     Spaces = "             ",
     case Data of
     	{_, Std, List} when 
@@ -241,7 +279,21 @@ create_error_logger_msg(Data) ->
 
 
 
+klogger_integration_error_logger(Logger, enable) ->
+    %% add the klogger handler to error_logger
+    case lists:member(error_logger_klogger_handler, 
+		      gen_event:which_handlers(error_logger)) of
+	true->
+	    error_logger ! {add_klogger, Logger};
+	false ->
+	    error_logger:tty(false),
+	    gen_event:add_handler(error_logger, 
+				  error_logger_klogger_handler, 
+				  [Logger])
+    end;
 
+klogger_integration_error_logger(Logger, disable) ->
+    error_logger ! {delete_klogger, Logger}.
 
 
 

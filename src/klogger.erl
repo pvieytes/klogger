@@ -112,27 +112,11 @@ get_error_logger(Logger, BackendName, Mode) ->
     %% check logger
     case code:is_loaded(Logger) of
 	{file, _} ->    
-	    case Mode of
-		enable ->
-		    %% add the klogger handler to error_logger
-		    case lists:member(error_logger_klogger_handler, 
-				      gen_event:which_handlers(error_logger)) of
-			true->
-			    ignore;
-			false ->
-			    gen_event:add_handler(error_logger, 
-						  error_logger_klogger_handler, 
-						  [])
-		    end,	    
-		    Logger ! {get_error_logger, BackendName},
-		    error_logger ! {add_klogger, Logger},
-		    ok;	  
-		disable ->
-
-		    ok
-	    end;
-	false ->
+	    klogger_handler:get_error_logger(Logger, BackendName, Mode),
+	    ok;
+	_ ->
 	    {error, "logger not found"}
     end.
+
 		
 

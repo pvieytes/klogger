@@ -36,9 +36,13 @@
 start(_StartType, _StartArgs) ->
     klogger_sup:start_link().
 
-prep_stop(State) ->
+prep_stop(_State) ->
     %% delete handler from error_logger
     gen_event:delete_handler(error_logger, error_logger_klogger_handler, []),
+
+    %% enable error_logger tty
+    error_logger:tty(false),
+
     %% delete loggers modules
     lists:foreach(fun({Mod, _, _, _}) ->
 			  code:delete(Mod)

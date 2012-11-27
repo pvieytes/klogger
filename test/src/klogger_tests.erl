@@ -29,6 +29,8 @@ start() ->
 general_test() ->
     ?debugMsg("General tests"),
 
+
+    error_logger:info_msg("info msg in error logger"),
     %%delete previous logs
     LogFilePath =  "./test.log",
     file:delete(LogFilePath),   
@@ -37,7 +39,19 @@ general_test() ->
     ?assertMatch(ok, klogger:start()),
 
     %% add logger
-    Options = [{console_backend, console_log, debug}, {file_backend, file_log, debug, LogFilePath}],
+    Options = [
+	       {backend, [{name, console_log}, 
+			  {type, console_backend},
+			  {loglevel, debug},
+			  {get_error_logger, enable}
+			 ]},
+	       {backend,  [{name, file_log}, 
+			   {type, file_backend},
+			   {loglevel, debug},
+			   {path, LogFilePath},
+			   {get_error_logger, enable}
+			  ]}
+	      ],
 
     %% logging
     ?assertMatch(ok, klogger:add_logger(logger, Options)),
@@ -49,9 +63,6 @@ general_test() ->
 
     %% error logger
     ?debugMsg("error logger"),
-    ?assertMatch(ok, klogger:get_error_logger(logger, console_log, enable)),
-    ?assertMatch(ok, klogger:get_error_logger(logger, file_log, enable)),
-    error_logger:tty(false),
     ?assertMatch(ok, error_logger:info_msg("info msg in error logger")),    
     ?assertMatch(ok, error_logger:info_msg("info msg in error logger; data: ~p", [data_atom])),    
     ?assertMatch(ok, error_logger:info_report([{info,data1},a_term,{tag2,data}])),    
@@ -61,6 +72,10 @@ general_test() ->
     ?assertMatch(ok, error_logger:error_msg("error msg in error logger")),
     ?assertMatch(ok, error_logger:error_msg("error msg in error logger: ~p", [data_atom])),
     ?assertMatch(ok, error_logger:error_report([{error,data1},a_term,{tag2,data}])),
+    ?assertMatch(ok, klogger:get_error_logger(logger, console_log, disable)),
+    ?assertMatch(ok, klogger:get_error_logger(logger, file_log, disable)),
+    timer:sleep(100),
+    ?assertMatch(ok, error_logger:info_msg("info msg in error logger")),    
 
     %%stop klogger
     ?assertMatch(ok, klogger:stop()).
