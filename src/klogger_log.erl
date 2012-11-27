@@ -53,7 +53,12 @@
 %%           string()
 %% @end
 %%--------------------------------------------------------------------
-create_logger(LoggerName, Backends) ->
+create_logger(LoggerName, B) ->
+    Backends = 
+	if
+	    is_tuple(B) -> [B];
+	    is_list(B) -> B
+	end,
     %% check specs
     case create_backend_record_list(Backends) of
 	{error, _} = E ->
@@ -159,10 +164,13 @@ get_code(LoggerName, Backends) ->
               warning/1,
               error/1,
               fatal/1,
-              get_backends/0
+              get_backends/0,
+              is_klogger/0
             ]).  
 
        -define(BACKENDS, " ++ BackendsString ++ ").
+
+       is_klogger() -> true.
 
        get_backends() -> ?BACKENDS.
 

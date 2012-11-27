@@ -28,7 +28,8 @@
 
 -include_lib("klogger/include/klogger.hrl").
 %% API
--export([get_error_logger/3]).
+-export([get_error_logger/3
+	]).
 
 %% gen_event callbacks
 -export([init/1, handle_event/2, handle_call/2, 
@@ -47,7 +48,7 @@
 
 
 %%%===================================================================
-%%% gen_event callbacks
+%%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -189,6 +190,12 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, State) ->
+    case State#state.get_error_logger of
+	enable ->
+	    klogger_integration_error_logger(State#state.logger_name, disable);
+	disable ->
+	    ignore
+    end,
     case State#state.backend of
 	_Backend = #file_backend{} ->  
 	    %% close file

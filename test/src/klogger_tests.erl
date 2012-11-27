@@ -28,9 +28,9 @@ start() ->
 
 general_test() ->
     ?debugMsg("General tests"),
+   
 
 
-    error_logger:info_msg("info msg in error logger"),
     %%delete previous logs
     LogFilePath =  "./test.log",
     file:delete(LogFilePath),   
@@ -39,22 +39,37 @@ general_test() ->
     ?assertMatch(ok, klogger:start()),
 
     %% add logger
-    Options = [
-	       {backend, [{name, console_log}, 
-			  {type, console_backend},
-			  {loglevel, debug},
-			  {get_error_logger, enable}
-			 ]},
-	       {backend,  [{name, file_log}, 
-			   {type, file_backend},
+    ?assertMatch(ok, klogger:add_logger(logger)),
+    ?assertMatch(ok, klogger:delete_logger(logger)),
+    Backend = {backend, [{name, console_log}, 
+			 {type, console_backend},
+			 {loglevel, debug},
+			 {get_error_logger, enable}
+			]},
+    ?assertMatch(ok, klogger:add_logger(logger, Backend)),
+    ?assertMatch(true, 
+		 lists:member(error_logger_klogger_handler,
+			      gen_event:which_handlers(error_logger))),
+
+    %% add logger
+    Backends = [
+		{backend, [{name, console_log}, 
+			   {type, console_backend},
 			   {loglevel, debug},
-			   {path, LogFilePath},
 			   {get_error_logger, enable}
-			  ]}
-	      ],
+			  ]},
+		{backend,  [{name, file_log}, 
+			    {type, file_backend},
+			    {loglevel, debug},
+			    {path, LogFilePath},
+			    {get_error_logger, enable}
+			   ]}
+	       ],
 
     %% logging
-    ?assertMatch(ok, klogger:add_logger(logger, Options)),
+    ?assertNot(ok == klogger:add_logger(logger, Backends)),
+    ?assertMatch(ok, klogger:delete_logger(logger)),
+    ?assertMatch(ok, klogger:add_logger(logger, Backends)),
     ?assertMatch(ok, logger:debug("text message")),
     ?assertMatch(ok, logger:info("text message")),
     ?assertMatch(ok, logger:warning("text message")),

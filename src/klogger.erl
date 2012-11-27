@@ -31,6 +31,7 @@
 	 stop/0,
 	 add_logger/1,
 	 add_logger/2,
+	 delete_logger/1,
 	 set_log_level/2,
 	 get_error_logger/3]).
 
@@ -43,7 +44,6 @@
 %% ===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% start klogger application
 %%
@@ -55,7 +55,6 @@ start()->
     application:start(?MODULE).
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% stop klogger application
 %%
@@ -68,7 +67,6 @@ stop()->
 
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% add logger to the app
 %%
@@ -77,11 +75,12 @@ stop()->
 %% @end
 %%--------------------------------------------------------------------
 add_logger(Logger)->
-    BackendSpecs = [{console_backend, console_log, ?DEBUG}],
+    BackendSpecs = [{backend, [{name, console_log}, 
+			       {type, console_backend},
+			       {loglevel, debug}]}],		    
     add_logger(Logger, BackendSpecs).
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% add logger to the app
 %%
@@ -90,11 +89,33 @@ add_logger(Logger)->
 %% @end
 %%--------------------------------------------------------------------
 add_logger(Logger, BackendSpecs)->
-    klogger_log:create_logger(Logger, BackendSpecs).
+   case code:is_loaded(Logger) of
+       {file, _} -> 
+	   {error, "There is a previous module with the same name"};
+       _ ->
+	   klogger_log:create_logger(Logger, BackendSpecs)
+   end.
+
 
 
 %%--------------------------------------------------------------------
-%% @private
+%% @doc
+%% add logger to the app
+%%
+%% @spec delete_logger(Logger::atom()) -> ok | {error | Error}
+%%
+%% @end
+%%--------------------------------------------------------------------
+delete_logger(Logger) ->
+    true = Logger:is_klogger(),
+    gen_event:stop(Logger),
+    supervisor:terminate_child(klogger_sup, Logger),
+    supervisor:delete_child(klogger_sup, Logger),
+    code:delete(Logger),
+    code:purge(Logger),
+    ok.
+
+%%--------------------------------------------------------------------
 %% @doc
 %%
 %%
