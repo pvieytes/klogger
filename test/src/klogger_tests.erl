@@ -87,9 +87,7 @@ general_test() ->
     ?assertMatch(ok, error_logger:error_report([{error,data1},a_term,{tag2,data}])),
     ?assertMatch(ok, klogger:get_error_logger(logger, console_log, disable)),
     ?assertMatch(ok, klogger:get_error_logger(logger, file_log, disable)),
-    timer:sleep(100),
-    ?assertMatch(ok, error_logger:info_msg("info msg in error logger")),    
-
+   
     %%stop klogger
     ?assertMatch(ok, klogger:stop()).
 

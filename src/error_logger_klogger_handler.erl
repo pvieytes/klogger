@@ -103,7 +103,6 @@ handle_call(_Request, State) ->
 %%--------------------------------------------------------------------
 handle_info({add_klogger, Logger}, State) ->
     Kloggers = State#state.kloggers,
-    io:format("dbg klogger before add: ~p~n", [Kloggers]),
     case proplists:get_value(Logger, Kloggers) of
 	undefined ->
 	    {ok,  State#state{kloggers=[{Logger, 1}| Kloggers]}};
@@ -114,7 +113,6 @@ handle_info({add_klogger, Logger}, State) ->
 
 handle_info({delete_klogger, Logger}, State) ->
     Kloggers = State#state.kloggers,
-    io:format("dbg klogger before delete: ~p~n", [Kloggers]),   
     UpdatedKloggers =
     	case proplists:get_value(Logger, Kloggers) of
     	    undefined ->
@@ -124,7 +122,6 @@ handle_info({delete_klogger, Logger}, State) ->
     	    Count ->
     		[{Logger, Count-1}|proplists:delete(Logger, Kloggers)]
     	end,
-    io:format("dbg UpdatedKloggers: ~p~n", [UpdatedKloggers]),
     case UpdatedKloggers of
 	[] ->
 	    spawn(fun() -> error_logger:tty(true) end),
