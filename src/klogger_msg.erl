@@ -93,5 +93,6 @@ create_log_msg(ActionCode, Msg, TimeStamp) ->
 	    M when M < 1000 ->
 		lists:flatten(io_lib:format("~p", [M]))
 	end,
-    Date = lists:flatten(io_lib:format("~s ~s ~p ~p:~s:~s ~s" , [DayName, MonthName, Y, Ho, Min, Seg, Mili])),
+    Date = lists:flatten(io_lib:format("~s ~p ~s ~p ~p:~s:~s ~s" , 
+				       [DayName, D, MonthName, Y, Ho, Min, Seg, Mili])),
     lists:flatten(io_lib:format("[~s] [~s]  ~s", [Date, Act, Msg])).
