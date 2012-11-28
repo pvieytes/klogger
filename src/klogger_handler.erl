@@ -26,7 +26,8 @@
 
 -behaviour(gen_event).
 
--include_lib("klogger/include/klogger.hrl").
+-include("include/klogger.hrl").
+
 %% API
 -export([get_error_logger/3
 	]).

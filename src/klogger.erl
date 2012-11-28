@@ -24,7 +24,7 @@
 
 -module(klogger).
 
--include_lib("klogger/include/klogger.hrl").
+-include("include/klogger.hrl").
 
 %% API
 -export([start/0,
