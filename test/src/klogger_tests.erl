@@ -29,8 +29,6 @@ start() ->
 general_test() ->
     ?debugMsg("General tests"),
    
-
-
     %%delete previous logs
     LogFilePath =  "./test.log",
     file:delete(LogFilePath),   

@@ -100,26 +100,31 @@ add_logger(Logger, BackendSpecs)->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% add logger to the app
+%% delete logger to the app
 %%
 %% @spec delete_logger(Logger::atom()) -> ok | {error | Error}
 %%
 %% @end
 %%--------------------------------------------------------------------
 delete_logger(Logger) ->
-    true = Logger:is_klogger(),
-    gen_event:stop(Logger),
-    supervisor:terminate_child(klogger_sup, Logger),
-    supervisor:delete_child(klogger_sup, Logger),
-    code:delete(Logger),
-    code:purge(Logger),
-    ok.
+    try  
+	Logger:is_klogger(),
+	gen_event:stop(Logger),
+	supervisor:terminate_child(klogger_sup, Logger),
+	supervisor:delete_child(klogger_sup, Logger),
+	code:delete(Logger),
+	code:purge(Logger),
+	ok
+    catch
+	error:undef ->
+	    {error, "logger not found"}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Change the log level of the logger
 %%
-%%
-%% @spec set_log_level(Logger::atom(), List::[{backend::atom(), Level::integer}]) -> ok | {error | Error}
+%% @spec set_log_level(Logger::atom(), List::[{BackendName::atom(), Level::integer}]) -> ok | {error | Error}
 %%
 %% @end
 %%--------------------------------------------------------------------
@@ -129,6 +134,16 @@ set_log_level(Logger, Tuple) when is_tuple(Tuple) ->
 set_log_level(Logger, LevelList) ->
     klogger_log:set_log_level(Logger, LevelList).
 
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% A klogger can log error_logger events. This function enables or disables this functionality
+%%
+%% @spec get_error_logger(Logger::atom(), BackendName::atom(), enable | disable) -> ok | {error, Reason}
+%%
+%% @end
+%%--------------------------------------------------------------------
 get_error_logger(Logger, BackendName, Mode) ->
     %% check logger
     case code:is_loaded(Logger) of
