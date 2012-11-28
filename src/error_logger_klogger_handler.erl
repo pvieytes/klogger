@@ -32,7 +32,7 @@
 
 -define(SERVER, ?MODULE). 
 
--record(state, {kloggers=[]}).
+-record(state, {kloggers}).
 
 %%%===================================================================
 %%% gen_event callbacks
@@ -47,8 +47,8 @@
 %% @spec init(Args) -> {ok, State}
 %% @end
 %%--------------------------------------------------------------------
-init([]) ->
-    {ok, #state{}}.
+init([Logger]) ->
+    {ok, #state{kloggers=[{Logger, 1}]}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -65,7 +65,7 @@ init([]) ->
 %%--------------------------------------------------------------------
 handle_event(Event, State) ->
     lists:foreach(
-      fun(Logger) ->
+      fun({Logger, _}) ->
 	      gen_event:notify(Logger, {error_logger_event, Event})
       end,
       State#state.kloggers),
@@ -103,12 +103,38 @@ handle_call(_Request, State) ->
 %%--------------------------------------------------------------------
 handle_info({add_klogger, Logger}, State) ->
     Kloggers = State#state.kloggers,
-    case lists:member(Logger, Kloggers) of
-	true ->
-	     {ok, State};
-	false ->
-	    {ok, State#state{kloggers=[Logger| Kloggers]}}
-    end.
+    io:format("dbg klogger before add: ~p~n", [Kloggers]),
+    case proplists:get_value(Logger, Kloggers) of
+	undefined ->
+	    {ok,  State#state{kloggers=[{Logger, 1}| Kloggers]}};
+	Count ->
+	    UpdatedKloggers = [{Logger, Count+1}|proplists:delete(Logger, Kloggers)],
+	    {ok, State#state{kloggers= UpdatedKloggers}}
+    end;
+
+handle_info({delete_klogger, Logger}, State) ->
+    Kloggers = State#state.kloggers,
+    io:format("dbg klogger before delete: ~p~n", [Kloggers]),   
+    UpdatedKloggers =
+    	case proplists:get_value(Logger, Kloggers) of
+    	    undefined ->
+    		Kloggers;
+    	    Count when Count =< 1 ->
+    		proplists:delete(Logger, Kloggers);
+    	    Count ->
+    		[{Logger, Count-1}|proplists:delete(Logger, Kloggers)]
+    	end,
+    io:format("dbg UpdatedKloggers: ~p~n", [UpdatedKloggers]),
+    case UpdatedKloggers of
+	[] ->
+	    spawn(fun() -> error_logger:tty(true) end),
+	    remove_handler;
+	UpdatedKloggers ->
+	    {ok, State#state{kloggers= UpdatedKloggers}}
+    end;
+
+handle_info(_, State) ->    
+    {ok, State}.
 
 %%--------------------------------------------------------------------
 %% @private

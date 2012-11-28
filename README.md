@@ -36,32 +36,25 @@ klogger:add_logger(logger).
 logger:debug("text message").
 ```
 The logger name ('logger' in this case) must be an atom. You should be careful with this name. 
-Some code will be compiled dynamically and loaded as logger name, so this could override some existing module.
+Some code will be compiled dynamically and loaded as logger name.
 
-
+Options could be a backend tuple or a list of backend tuples
 Options for console backend:
+
+
 ```erlang
-{ 
-    console_backend, 
-    BackendName::atom(),
-    LogLevel:: integer() | atom()
-}
+{backend, [backend_option()]}
+
+backend_option() = name() | type() | loglevel() | level() | path() | get_error_logger()
+name() = {name, Name::atom()}
+type() = {type, file_backend | console_backend}
+loglevel() = {loglevel, integer() | debug | info | warning | error | fatal | none}
+path() = {path, Path::string()}
+get_error_logger() =  {get_error_logger, enable | disable}
 ```
+type() and name() are mandatory, and path() is also mandatory for file_backend loggers.
 
-
-Options for file backend:
-```erlang
-{ 
-    file_backend, 
-    BackendName::atom(),
-    LogLevel:: integer() | atom(),
-    FilePath::string()
-
-}
-```
-
-Log level could be:
-* a integer (use the macros defined in include/klogger.hrl file):
+There are defined some integer macros:
   * ```?DEBUG```
   * ```?INFO```
   * ```?WARNING```
@@ -71,20 +64,23 @@ Log level could be:
 
 
 
-* an atom:
- * ```debug```
- * ```info```
- * ```warning```
- * ```error```
- * ```fatal```
- * ```none```
-
 
 Add new logger with options:
 
 ```erlang
-Options = [{file_backend, file_log, ?ERROR, "/tmp/test.log"},
-           {console_backend, console_log, debug}]
+Options = [
+ 	{backend, [{name, console_log}, 
+			   {type, console_backend},
+			   {loglevel, debug},
+			   {get_error_logger, enable}
+			  ]},
+		{backend,  [{name, file_log}, 
+			    {type, file_backend},
+			    {loglevel, debug},
+			    {path, LogFilePath},
+			    {get_error_logger, enable}
+			   ]}
+	       ]
 klogger:add_logger(logger, Options).
 ```
 

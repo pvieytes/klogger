@@ -31,6 +31,7 @@
 	 stop/0,
 	 add_logger/1,
 	 add_logger/2,
+	 delete_logger/1,
 	 set_log_level/2,
 	 get_error_logger/3]).
 
@@ -43,7 +44,6 @@
 %% ===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% start klogger application
 %%
@@ -55,7 +55,6 @@ start()->
     application:start(?MODULE).
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% stop klogger application
 %%
@@ -68,7 +67,6 @@ stop()->
 
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% add logger to the app
 %%
@@ -77,11 +75,12 @@ stop()->
 %% @end
 %%--------------------------------------------------------------------
 add_logger(Logger)->
-    BackendSpecs = [{console_backend, console_log, ?DEBUG}],
+    BackendSpecs = [{backend, [{name, console_log}, 
+			       {type, console_backend},
+			       {loglevel, debug}]}],		    
     add_logger(Logger, BackendSpecs).
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% add logger to the app
 %%
@@ -90,15 +89,42 @@ add_logger(Logger)->
 %% @end
 %%--------------------------------------------------------------------
 add_logger(Logger, BackendSpecs)->
-    klogger_log:create_logger(Logger, BackendSpecs).
+   case code:is_loaded(Logger) of
+       {file, _} -> 
+	   {error, "There is a previous module with the same name"};
+       _ ->
+	   klogger_log:create_logger(Logger, BackendSpecs)
+   end.
+
 
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
+%% delete logger to the app
 %%
+%% @spec delete_logger(Logger::atom()) -> ok | {error | Error}
 %%
-%% @spec set_log_level(Logger::atom(), List::[{backend::atom(), Level::integer}]) -> ok | {error | Error}
+%% @end
+%%--------------------------------------------------------------------
+delete_logger(Logger) ->
+    try  
+	Logger:is_klogger(),
+	gen_event:stop(Logger),
+	supervisor:terminate_child(klogger_sup, Logger),
+	supervisor:delete_child(klogger_sup, Logger),
+	code:delete(Logger),
+	code:purge(Logger),
+	ok
+    catch
+	error:undef ->
+	    {error, "logger not found"}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Change the log level of the logger
+%%
+%% @spec set_log_level(Logger::atom(), List::[{BackendName::atom(), Level::integer}]) -> ok | {error | Error}
 %%
 %% @end
 %%--------------------------------------------------------------------
@@ -108,31 +134,25 @@ set_log_level(Logger, Tuple) when is_tuple(Tuple) ->
 set_log_level(Logger, LevelList) ->
     klogger_log:set_log_level(Logger, LevelList).
 
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% A klogger can log error_logger events. This function enables or disables this functionality
+%%
+%% @spec get_error_logger(Logger::atom(), BackendName::atom(), enable | disable) -> ok | {error, Reason}
+%%
+%% @end
+%%--------------------------------------------------------------------
 get_error_logger(Logger, BackendName, Mode) ->
     %% check logger
     case code:is_loaded(Logger) of
 	{file, _} ->    
-	    case Mode of
-		enable ->
-		    %% add the klogger handler to error_logger
-		    case lists:member(error_logger_klogger_handler, 
-				      gen_event:which_handlers(error_logger)) of
-			true->
-			    ignore;
-			false ->
-			    gen_event:add_handler(error_logger, 
-						  error_logger_klogger_handler, 
-						  [])
-		    end,	    
-		    Logger ! {get_error_logger, BackendName},
-		    error_logger ! {add_klogger, Logger},
-		    ok;	  
-		disable ->
-
-		    ok
-	    end;
-	false ->
+	    klogger_handler:get_error_logger(Logger, BackendName, Mode),
+	    ok;
+	_ ->
 	    {error, "logger not found"}
     end.
+
 		
 

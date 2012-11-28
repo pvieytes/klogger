@@ -53,17 +53,26 @@
 %%           string()
 %% @end
 %%--------------------------------------------------------------------
-create_logger(LoggerName, Backends) ->
-    Specs = ?EVENTCHILD(LoggerName),
-    case supervisor:start_child(klogger_sup, Specs) of
-	{ok, _Pid} -> 
-	    add_handlers(LoggerName, Backends),
-	    compile_logger(LoggerName, Backends),
-	    ok;
-	Error -> Error
+create_logger(LoggerName, B) ->
+    Backends = 
+	if
+	    is_tuple(B) -> [B];
+	    is_list(B) -> B
+	end,
+    %% check specs
+    case create_backend_record_list(Backends) of
+	{error, _} = E ->
+	    E;
+	BackendsRecords ->
+	    Specs = ?EVENTCHILD(LoggerName),
+	    case supervisor:start_child(klogger_sup, Specs) of
+		{ok, _Pid} -> 
+		    add_handlers(LoggerName, BackendsRecords),
+		    compile_logger(LoggerName, BackendsRecords),
+		    ok;
+		Error -> Error
+	    end
     end.
-
-
 
 set_log_level(Logger, NewLevels)->
    PreviousBackends=
@@ -145,7 +154,8 @@ compile_logger(Name, Backends) ->
 %%--------------------------------------------------------------------
 get_code(LoggerName, Backends) ->
     ModuleStr = atom_to_list(LoggerName),
-    BackendsString = backends_to_str(Backends),
+    %% BackendsString = backends_to_str(Backends),
+    BackendsString = backends_records_to_str(Backends),
     "-module(" ++ ModuleStr ++ ").
 
      -export([log/2,          
@@ -154,10 +164,13 @@ get_code(LoggerName, Backends) ->
               warning/1,
               error/1,
               fatal/1,
-              get_backends/0
+              get_backends/0,
+              is_klogger/0
             ]).  
 
        -define(BACKENDS, " ++ BackendsString ++ ").
+
+       is_klogger() -> true.
 
        get_backends() -> ?BACKENDS.
 
@@ -173,45 +186,32 @@ get_code(LoggerName, Backends) ->
       ".
 
 
+%% {BackendName :: atom(), Level :: integer()}
+backends_records_to_str(Backends) ->
+   "[" ++  backends_records_to_str(Backends, "") ++ "]".
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This funciton convert a list of backend info tuples in a string
-%%
-%% @spec backends_to_str() -> 
-%%           string()
-%% 
-%% @end
-%%--------------------------------------------------------------------
-backends_to_str(Backends)->
-    BackendsNumericLevels
-	= lists:map(
-	    fun({T, N, L, P}) ->
-		    {T, N, ?LEVELCODE(L), P};
-	       ({T, N, L}) ->
-		    {T, N, ?LEVELCODE(L)}
-	    end,
-	    Backends),	
-    "[" ++ backends_to_str_loop(BackendsNumericLevels, "") ++ "]".
+backends_records_to_str([Backend=#file_backend{}|Rest] , String) ->
+    TupleStr =
+	"{ " ++ atom_to_list(Backend#file_backend.name) ++ ", " ++
+ 	lists:flatten(io_lib:format("~p", [Backend#file_backend.level])) ++
+	"}",
+    case Rest of
+	[] -> String ++ TupleStr;
+	Rest -> 
+	    backends_records_to_str(Rest, String  ++ TupleStr ++ ", ")
+    end;
 
-backends_to_str_loop([Tuple|[]], Acc)->
-    Acc ++ convert_tuple_to_string(Tuple);
+backends_records_to_str([Backend=#console_backend{}|Rest] , String) ->
+    TupleStr =
+	"{ " ++ atom_to_list(Backend#console_backend.name) ++ ", " ++
+ 	lists:flatten(io_lib:format("~p", [Backend#console_backend.level])) ++
+	"}",
+    case Rest of
+	[] -> String ++ TupleStr;
+	Rest -> 
+	    backends_records_to_str(Rest, String  ++ TupleStr ++ ", ")
+    end.
 
-backends_to_str_loop([Tuple|Rest], Acc) -> 
-    convert_tuple_to_string(Tuple) ++ ", " ++  backends_to_str_loop(Rest, Acc).
-
-convert_tuple_to_string(Tuple)->
-    List = 
-	lists:map(
-	  fun(Atom) when is_atom(Atom) ->
-		  atom_to_list(Atom);
-	     (Integer) when is_integer(Integer) ->
-		  lists:flatten(io_lib:format("~p", [Integer]));
-	     (List) when is_list(List) -> "\"" ++ List ++ "\""
-	  end,
-	  tuple_to_list(Tuple)),
-    "{" ++ string:join(List, ", ") ++ "}".     
 	     
 
 %% event server funs
@@ -227,16 +227,12 @@ convert_tuple_to_string(Tuple)->
 %% type() = console_backend | file_backend
 %% @end
 %%--------------------------------------------------------------------
-add_handlers(LoggerName, Backends)->
+add_handlers(LoggerName, BackendsRecords)->
     lists:foreach(
-      fun({file_backend, Name, Level, Path})->
-	      Backend = #file_backend{name=Name, level=Level, path=Path},
-	      ok = gen_event:add_handler(LoggerName, klogger_handler, [LoggerName, Backend]);
-	 ({console_backend, Name, Level})->	     
-	      Backend = #console_backend{name=Name, level=Level},
-	      ok = gen_event:add_handler(LoggerName, klogger_handler, [LoggerName, Backend])
+      fun(BackendRecord) ->
+	      ok = gen_event:add_handler(LoggerName, klogger_handler, [LoggerName, BackendRecord])
       end,
-      Backends).
+      BackendsRecords).
 
 
 
@@ -244,19 +240,56 @@ add_handlers(LoggerName, Backends)->
 %%=========================================
 
 do_log(LoggerName, Action, Msg, Backends) ->
-    ActionCode =  ?LEVELCODE(Action),
-    Log = 
-	fun(Event) -> 
-		gen_event:notify(LoggerName, Event) 
-	end,
+    ActionCode =  ?LEVELCODE(Action),   
     lists:foreach(
-      fun({_, BackendName, BackendLevel, _}) when ActionCode =< BackendLevel  ->
-	      Log({log, BackendName, ActionCode, Msg, now()});
-	 ({_, BackendName, BackendLevel}) when ActionCode =< BackendLevel  ->
-	      Log({log, BackendName, ActionCode, Msg, now()});
+      fun({BackendName, BackendLevel}) when ActionCode =< BackendLevel  ->
+	      Event = {log, BackendName, ActionCode, Msg, now()},
+	      gen_event:notify(LoggerName, Event);
 	 (_E) ->	      
 	      ignore
       end, 
-      Backends).
+    Backends).
 
 
+
+create_backend_record_list(Backends)->
+    create_backend_record_list(Backends,[]).
+
+create_backend_record_list([],Acc)->
+    Acc;
+
+create_backend_record_list([{backend, BackendList}|Rest],Acc)->   
+    case proplists:get_value(name, BackendList) of
+	undefined -> {error, "name is mandatory"};
+	Name ->
+	    Level =  
+		case proplists:get_value(loglevel, BackendList) of 
+		    undefined -> ?DEBUG;
+		    L -> ?LEVELCODE(L)
+		end,
+	    GetErLog = 
+		case proplists:get_value(get_error_logger, BackendList) of 
+		    undefined -> disable;
+		    ErL -> ErL
+		end,
+	    case proplists:get_value(type, BackendList) of 
+		console_backend ->
+		    Record = 
+			#console_backend{name=Name,
+					 level=Level,
+					 get_error_logger=GetErLog},
+		    create_backend_record_list(Rest,[Record|Acc]);
+		file_backend ->
+		    case proplists:get_value(path, BackendList) of 
+			undefined -> 
+			    {error, "path is mandatory for file_backend type"};
+			Path -> 
+			    Record =
+				#file_backend{name=Name,
+					      level=Level,
+					      get_error_logger=GetErLog,
+					      path=Path},
+			    create_backend_record_list(Rest,[Record|Acc])
+		    end
+	    end
+    end.
