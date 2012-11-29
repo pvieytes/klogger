@@ -58,7 +58,6 @@ general_test() ->
     timer:sleep(100),
     logger:debug("msg ram to console"),
     timer:sleep(100),
-
     logger:debug("msg ram to console"),
     timer:sleep(100),  
     NewTransBackend = {backend, [{name, console_log}, 
@@ -94,11 +93,16 @@ general_test() ->
 
 
 
-    ?assertMatch(ok, logger:debug("text message")),
-    ?assertMatch(ok, logger:info("text message")),
-    ?assertMatch(ok, logger:warning("text message")),
-    ?assertMatch(ok, logger:error("text message")),
-    ?assertMatch(ok, logger:fatal("text message")),
+    ?assertMatch(ok, logger:debug("debug text message")),
+    ?assertMatch(ok, logger:debug("debug text message: ~p", [{complex, [data]}])),
+    ?assertMatch(ok, logger:info("info text message")),
+    ?assertMatch(ok, logger:info("info text message: ~p", [{complex, [data]}])),
+    ?assertMatch(ok, logger:warning("warning text message")),
+    ?assertMatch(ok, logger:warning("warning text message: ~p", [{complex, [data]}])),
+    ?assertMatch(ok, logger:error("error text message")),
+    ?assertMatch(ok, logger:error("error text message: ~p", [{complex, [data]}])),
+    ?assertMatch(ok, logger:fatal("fatal text message")),
+    ?assertMatch(ok, logger:fatal("fatal text message: ~p", [{complex, [data]}])),
 
     %% error logger
     ?debugMsg("error logger"),

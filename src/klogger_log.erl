@@ -136,6 +136,7 @@ set_log_level(Logger, NewLevels)->
 %%--------------------------------------------------------------------
 compile_logger(Name, Backends) ->
     CodeString = get_code(Name, Backends),
+    file:write_file("/tmp/logger.erl", list_to_binary(CodeString)),
     {Module,Code} = dynamic_compile:from_string(CodeString),
     case code:load_binary(Module, lists:concat([Name, ".erl"]), Code) of
     	{error, _} = E-> E;
@@ -154,16 +155,21 @@ compile_logger(Name, Backends) ->
 %%--------------------------------------------------------------------
 get_code(LoggerName, Backends) ->
     ModuleStr = atom_to_list(LoggerName),
-    %% BackendsString = backends_to_str(Backends),
     BackendsString = backends_records_to_str(Backends),
     "-module(" ++ ModuleStr ++ ").
 
      -export([log/2,          
+              log/3, 
               debug/1,
+              debug/2,
               info/1,
+              info/2,
               warning/1,
+              warning/2,
               error/1,
+              error/2,
               fatal/1,
+              fatal/2,
               get_backends/0,
               is_klogger/0
             ]).  
@@ -173,14 +179,35 @@ get_code(LoggerName, Backends) ->
        is_klogger() -> true.
 
        get_backends() -> ?BACKENDS.
-
+ 
+       debug(Format, D) ->
+             debug(lists:flatten(io_lib:format(Format, D))).  
+    
        debug(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?DEBUG])) ++ ", Msg).
+
+
+       info(Format, D) ->
+             info(lists:flatten(io_lib:format(Format, D))).
        info(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?INFO])) ++ ", Msg).
-       warning(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?WARNING])) ++ ", Msg).
-       error(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?ERROR])) ++ ", Msg).
-       fatal(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?FATAL])) ++ ", Msg).
 
       
+       warning(Format, D) ->
+            warning(lists:flatten(io_lib:format(Format, D))).
+       warning(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?WARNING])) ++ ", Msg).
+
+      
+       error(Format, D) ->
+             error(lists:flatten(io_lib:format(Format, D))).
+       error(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?ERROR])) ++ ", Msg).
+
+
+       fatal(Format, D) -> 
+             fatal(lists:flatten(io_lib:format(Format, D))).
+       fatal(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?FATAL])) ++ ", Msg).
+
+
+       log(Action, Format, D) ->
+            log(Action, lists:flatten(io_lib:format(Format, D))).
        log(Action, Msg) ->
            " ++ atom_to_list(?MODULE) ++":do_log(" ++ ModuleStr ++ ", Action, Msg, ?BACKENDS).
       ".
