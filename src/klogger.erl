@@ -33,7 +33,8 @@
 	 add_logger/2,
 	 delete_logger/1,
 	 set_log_level/2,
-	 get_error_logger/3]).
+	 get_error_logger/3,
+	 transfer_ram/3]).
 
 
 
@@ -155,4 +156,9 @@ get_error_logger(Logger, BackendName, Mode) ->
     end.
 
 		
+transfer_ram(Logger,  BackendName, NewBackend) when is_tuple(NewBackend) ->
+    transfer_ram(Logger,  BackendName, [NewBackend]);
 
+transfer_ram(Logger,  BackendName, NewBackends)->
+    klogger_handler:transfer_ram(Logger,  BackendName, NewBackends),
+    ok.

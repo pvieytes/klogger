@@ -55,3 +55,7 @@
 			  level,
 			  get_error_logger=disable}).
 
+-record(ram_backend, {name,
+		      level,
+		      get_error_logger=disable}).
+

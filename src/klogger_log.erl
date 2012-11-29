@@ -29,6 +29,7 @@
 
 %% API
 -export([create_logger/2,
+	 create_backend_record_list/1,
 	 set_log_level/2
 	 ]).
 
@@ -47,7 +48,7 @@
 %% @doc
 %% Create a new logger interface
 %%
-%% @spec compile_logger(LoggerName::atom(), 
+%% @spec create_logger(LoggerName::atom(), 
 %%                      [{BackendName::atom(), Type::atom(), Level::integer()}]) -> 
 %%           string()
 %% @end
@@ -200,6 +201,17 @@ backends_records_to_str([Backend=#file_backend{}|Rest] , String) ->
 	    backends_records_to_str(Rest, String  ++ TupleStr ++ ", ")
     end;
 
+backends_records_to_str([Backend=#ram_backend{}|Rest] , String) ->
+    TupleStr =
+	"{ " ++ atom_to_list(Backend#ram_backend.name) ++ ", " ++
+ 	lists:flatten(io_lib:format("~p", [Backend#ram_backend.level])) ++
+	"}",
+    case Rest of
+	[] -> String ++ TupleStr;
+	Rest -> 
+	    backends_records_to_str(Rest, String  ++ TupleStr ++ ", ")
+    end;
+
 backends_records_to_str([Backend=#console_backend{}|Rest] , String) ->
     TupleStr =
 	"{ " ++ atom_to_list(Backend#console_backend.name) ++ ", " ++
@@ -229,7 +241,7 @@ backends_records_to_str([Backend=#console_backend{}|Rest] , String) ->
 add_handlers(LoggerName, BackendsRecords)->
     lists:foreach(
       fun(BackendRecord) ->
-	      ok = gen_event:add_handler(LoggerName, klogger_handler, [LoggerName, BackendRecord])
+	      ok = gen_event:add_handler(LoggerName, klogger_handler, [LoggerName, BackendRecord, []])
       end,
       BackendsRecords).
 
@@ -277,6 +289,12 @@ create_backend_record_list([{backend, BackendList}|Rest],Acc)->
 			#console_backend{name=Name,
 					 level=Level,
 					 get_error_logger=GetErLog},
+		    create_backend_record_list(Rest,[Record|Acc]);
+		ram_backend ->
+		    Record = 
+			#ram_backend{name=Name,
+				     level=Level,
+				     get_error_logger=GetErLog},
 		    create_backend_record_list(Rest,[Record|Acc]);
 		file_backend ->
 		    case proplists:get_value(path, BackendList) of 
