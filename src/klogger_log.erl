@@ -208,8 +208,10 @@ get_code(LoggerName, Backends) ->
 
        log(Action, Format, D) ->
             log(Action, lists:flatten(io_lib:format(Format, D))).
-       log(Action, Msg) ->
-           " ++ atom_to_list(?MODULE) ++":do_log(" ++ ModuleStr ++ ", Action, Msg, ?BACKENDS).
+       log(Action, Msg) when is_list(Msg) ->
+           " ++ atom_to_list(?MODULE) ++":do_log(" ++ ModuleStr ++ ", Action, Msg, ?BACKENDS);
+       log(Action, Variable) ->
+           log(Action, lists:flatten(io_lib:format(\"~p\"))).
       ".
 
 
