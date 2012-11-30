@@ -39,7 +39,6 @@
 
 -define(SERVER, ?MODULE). 
 
-
 -record(state, {name,
 		level,
 		backend,
@@ -299,8 +298,7 @@ log(ActionCode, Msg, TimeStamp, State) ->
 
 manage_error_logger_event(Event, State) ->
     case Event of
-	{Error, _, Data} when Error == error; 
-			      Error == error_report  ->
+	{Error, _, Data} when Error == error ->
 	    if 
 		State#state.level >= ?ERROR ->
 		    Msg = create_error_logger_msg(Data),
@@ -308,8 +306,7 @@ manage_error_logger_event(Event, State) ->
 		true -> 
 		    ok
 	    end;
-	{Warning, _, Data} when Warning == warning_msg; 
-				Warning == warning_report ->
+	{Warning, _, Data} when Warning == warning_msg ->
 	    if 
 		State#state.level >= ?WARNING ->
 		    Msg = create_error_logger_msg(Data),
@@ -317,8 +314,7 @@ manage_error_logger_event(Event, State) ->
 		true -> 
 		    ok
 	    end;
-	{Info, _, Data} when Info == info_msg; 
-			     Info == info_report ->
+	{Info, _, Data} when Info == info_msg ->
 	    if 
 		State#state.level >= ?INFO ->
 		    Msg = create_error_logger_msg(Data),
@@ -332,22 +328,26 @@ manage_error_logger_event(Event, State) ->
     end.
 
 create_error_logger_msg(Data) ->
-    Spaces = "             ",
-    case Data of
-    	{_, Std, List} when 
-    	      Std == std_error;
-    	      Std == std_warning;
-    	      Std == std_info ->
-    	    lists:foldl(
-    	      fun({F, D}, Acc) ->
-    		      Acc ++ lists:flatten(io_lib:format("~n~s~p: ~p", [Spaces, F, D]));
-    		 (Term, Acc) -> 
-    		      Acc ++  lists:flatten(io_lib:format("~n~s~p", [Spaces, Term]))
-    	      end,
-    	      "",
-    	      List);
-    	{_, F, D} ->
-    	    lists:flatten(io_lib:format(F, D))
+    try 
+	Spaces = "             ",
+	case Data of
+	    {_, Std, List} when 
+		  Std == std_error;
+		  Std == std_warning;
+		  Std == std_info ->
+		lists:foldl(
+		  fun({F, D}, Acc) ->
+			  Acc ++ lists:flatten(io_lib:format("~n~s~p: ~p", [Spaces, F, D]));
+		     (Term, Acc) -> 
+			  Acc ++  lists:flatten(io_lib:format("~n~s~p", [Spaces, Term]))
+		  end,
+		  "",
+		  List);
+	    {_, F, D} ->
+		lists:flatten(io_lib:format(F, D))
+	end
+    catch _:_ ->
+	    lists:flatten(io_lib:format("~p", [Data]))
     end.
 
 
