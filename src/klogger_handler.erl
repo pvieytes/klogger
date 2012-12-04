@@ -266,6 +266,9 @@ terminate(_Reason, State) ->
 	_ ->
 	    ok
     end,
+    Logger = State#state.logger_name,
+    code:delete(Logger),
+    code:purge(Logger),
     ok.
 
 %%--------------------------------------------------------------------
