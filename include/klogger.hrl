@@ -29,7 +29,6 @@
 -define(FATAL, 1).
 -define(NONE, 0).
 
-
 -define(LEVELCODE(L),
 	case L of
 	    debug -> ?DEBUG;
@@ -41,10 +40,6 @@
 	    L when is_integer(L),  L >= ?NONE,  L =< ?DEBUG ->
 		L		
 	end).
-
-
-
-
 
 -record(file_backend, {name, 
 		       level,

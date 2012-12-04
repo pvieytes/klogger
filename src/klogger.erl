@@ -34,7 +34,8 @@
 	 delete_logger/1,
 	 set_log_level/2,
 	 get_error_logger/3,
-	 transfer_ram/3]).
+	 transfer_ram/3,
+	 is_valid_log_code/1]).
 
 
 
@@ -162,3 +163,12 @@ transfer_ram(Logger,  BackendName, NewBackend) when is_tuple(NewBackend) ->
 transfer_ram(Logger,  BackendName, NewBackends)->
     klogger_handler:transfer_ram(Logger,  BackendName, NewBackends),
     ok.
+
+
+is_valid_log_code(Code) ->
+    try
+	?LEVELCODE(Code),
+	true
+    catch _:_ ->
+	    false
+    end.
