@@ -37,6 +37,15 @@ start(_StartType, _StartArgs) ->
     klogger_sup:start_link().
 
 prep_stop(_State) ->
+
+    Children =  supervisor:which_children(klogger_sup),
+    lists:foreach(
+      fun({Id, _, _, _})->
+	      %% dummy call to ensure the logger is not working
+	      gen_event:call(Id, klogger_handler, dummy_call)
+      end,
+      Children),
+	      
     %% delete handler from error_logger
     gen_event:delete_handler(error_logger, error_logger_klogger_handler, []),
 
@@ -44,7 +53,7 @@ prep_stop(_State) ->
     lists:foreach(fun({Mod, _, _, _}) ->
 			  code:delete(Mod)
 		  end,
-		  supervisor:which_children(klogger_sup)),	     
+		  Children),	     
     ok.
 
 
