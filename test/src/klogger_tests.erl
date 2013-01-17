@@ -33,49 +33,80 @@ general_test() ->
     LogFilePath =  "./test.log",
     file:delete(LogFilePath),   
 
+
+
+
+
+
     %%start app
     ?assertMatch(ok, klogger:start()),
 
-    %% add logger
-    ?assertMatch(ok, klogger:add_logger(logger)),
-    ?assertMatch(ok, klogger:delete_logger(logger)),
-    Backend = {backend, [{name, console_log}, 
-			 {type, console_backend},
-			 {loglevel, debug},
-			 {get_error_logger, enable}
-			]},
-    ?assertMatch(ok, klogger:add_logger(logger, Backend)),
-    ?assertMatch(true, 
-		 lists:member(error_logger_klogger_handler,
-			      gen_event:which_handlers(error_logger))),
 
-    %% add logger
+    B = {backend, [{name, ram_log}, 
+		   {type, ram_backend},
+		   {loglevel, debug}
+		  ]},
+
+    ?assertMatch(ok, klogger:add_logger(logger, B)),
+    %% klogger:add_logger(logger, B),
+
+    logger:debug("msg ram to console"),
+    timer:sleep(100),
+    logger:debug("msg ram to console"),
+    timer:sleep(100),
+    logger:debug("msg ram to console"),
+    timer:sleep(100),
+    logger:debug("msg ram to console"),
+    timer:sleep(100),
+    logger:debug("msg ram to console"),
+    timer:sleep(100),  
+    NewTransBackend = {backend, [{name, console_log}, 
+    				 {type, console_backend},
+    				 {loglevel, debug}
+    				]},
+    ?assertMatch(ok, klogger:transfer_ram(logger, ram_log, NewTransBackend)),
+    timer:sleep(500),    
+    ?debugMsg("Ram logger finished"),
+
+
     Backends = [
-		{backend, [{name, console_log}, 
-			   {type, console_backend},
-			   {loglevel, debug},
-			   {get_error_logger, enable}
-			  ]},
-		{backend,  [{name, file_log}, 
-			    {type, file_backend},
-			    {loglevel, debug},
-			    {path, LogFilePath},
-			    {get_error_logger, enable}
-			   ]}
-	       ],
+    		{backend, [{name, console_log}, 
+    			   {type, console_backend},
+    			   {loglevel, debug},
+    			   {get_error_logger, enable}
+    			  ]},
+    		{backend,  [{name, file_log}, 
+    			    {type, file_backend},
+    			    {loglevel, debug},
+    			    {path, LogFilePath},
+    			    {get_error_logger, enable}
+    			   ]}
+    	       ],
 
-    %% logging
     ?assertNot(ok == klogger:add_logger(logger, Backends)),
     ?assertMatch(ok, klogger:delete_logger(logger)),
     ?assertMatch(ok, klogger:add_logger(logger, Backends)),
-    ?assertMatch(ok, logger:debug("text message")),
-    ?assertMatch(ok, logger:info("text message")),
-    ?assertMatch(ok, logger:warning("text message")),
-    ?assertMatch(ok, logger:error("text message")),
-    ?assertMatch(ok, logger:fatal("text message")),
+
+    ?assertMatch(true, 
+    		 lists:member(error_logger_klogger_handler,
+    			      gen_event:which_handlers(error_logger))),
+
+
+
+    ?assertMatch(ok, logger:debug("debug text message")),
+    ?assertMatch(ok, logger:debug("debug text message: ~p", [{complex, [data]}])),
+    ?assertMatch(ok, logger:info("info text message")),
+    ?assertMatch(ok, logger:info("info text message: ~p", [{complex, [data]}])),
+    ?assertMatch(ok, logger:warning("warning text message")),
+    ?assertMatch(ok, logger:warning("warning text message: ~p", [{complex, [data]}])),
+    ?assertMatch(ok, logger:error("error text message")),
+    ?assertMatch(ok, logger:error("error text message: ~p", [{complex, [data]}])),
+    ?assertMatch(ok, logger:fatal("fatal text message")),
+    ?assertMatch(ok, logger:fatal("fatal text message: ~p", [{complex, [data]}])),
 
     %% error logger
     ?debugMsg("error logger"),
+    error_logger:tty(false),
     ?assertMatch(ok, error_logger:info_msg("info msg in error logger")),    
     ?assertMatch(ok, error_logger:info_msg("info msg in error logger; data: ~p", [data_atom])),    
     ?assertMatch(ok, error_logger:info_report([{info,data1},a_term,{tag2,data}])),    
@@ -87,7 +118,7 @@ general_test() ->
     ?assertMatch(ok, error_logger:error_report([{error,data1},a_term,{tag2,data}])),
     ?assertMatch(ok, klogger:get_error_logger(logger, console_log, disable)),
     ?assertMatch(ok, klogger:get_error_logger(logger, file_log, disable)),
-   
+
     %%stop klogger
     ?assertMatch(ok, klogger:stop()).
 

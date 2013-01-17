@@ -25,11 +25,11 @@
 
 -module(klogger_log).
 
--include_lib("klogger/include/klogger.hrl").
-
+-include("include/klogger.hrl").
 
 %% API
 -export([create_logger/2,
+	 create_backend_record_list/1,
 	 set_log_level/2
 	 ]).
 
@@ -48,7 +48,7 @@
 %% @doc
 %% Create a new logger interface
 %%
-%% @spec compile_logger(LoggerName::atom(), 
+%% @spec create_logger(LoggerName::atom(), 
 %%                      [{BackendName::atom(), Type::atom(), Level::integer()}]) -> 
 %%           string()
 %% @end
@@ -136,6 +136,7 @@ set_log_level(Logger, NewLevels)->
 %%--------------------------------------------------------------------
 compile_logger(Name, Backends) ->
     CodeString = get_code(Name, Backends),
+    file:write_file("/tmp/logger.erl", list_to_binary(CodeString)),
     {Module,Code} = dynamic_compile:from_string(CodeString),
     case code:load_binary(Module, lists:concat([Name, ".erl"]), Code) of
     	{error, _} = E-> E;
@@ -154,16 +155,21 @@ compile_logger(Name, Backends) ->
 %%--------------------------------------------------------------------
 get_code(LoggerName, Backends) ->
     ModuleStr = atom_to_list(LoggerName),
-    %% BackendsString = backends_to_str(Backends),
     BackendsString = backends_records_to_str(Backends),
     "-module(" ++ ModuleStr ++ ").
 
      -export([log/2,          
+              log/3, 
               debug/1,
+              debug/2,
               info/1,
+              info/2,
               warning/1,
+              warning/2,
               error/1,
+              error/2,
               fatal/1,
+              fatal/2,
               get_backends/0,
               is_klogger/0
             ]).  
@@ -173,16 +179,39 @@ get_code(LoggerName, Backends) ->
        is_klogger() -> true.
 
        get_backends() -> ?BACKENDS.
-
+ 
+       debug(Format, D) ->
+             debug(lists:flatten(io_lib:format(Format, D))).  
+    
        debug(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?DEBUG])) ++ ", Msg).
+
+
+       info(Format, D) ->
+             info(lists:flatten(io_lib:format(Format, D))).
        info(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?INFO])) ++ ", Msg).
-       warning(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?WARNING])) ++ ", Msg).
-       error(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?ERROR])) ++ ", Msg).
-       fatal(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?FATAL])) ++ ", Msg).
 
       
-       log(Action, Msg) ->
-           " ++ atom_to_list(?MODULE) ++":do_log(" ++ ModuleStr ++ ", Action, Msg, ?BACKENDS).
+       warning(Format, D) ->
+            warning(lists:flatten(io_lib:format(Format, D))).
+       warning(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?WARNING])) ++ ", Msg).
+
+      
+       error(Format, D) ->
+             error(lists:flatten(io_lib:format(Format, D))).
+       error(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?ERROR])) ++ ", Msg).
+
+
+       fatal(Format, D) -> 
+             fatal(lists:flatten(io_lib:format(Format, D))).
+       fatal(Msg) -> log("++ lists:flatten(io_lib:format("~p", [?FATAL])) ++ ", Msg).
+
+
+       log(Action, Format, D) ->
+            log(Action, lists:flatten(io_lib:format(Format, D))).
+       log(Action, Msg) when is_list(Msg) ->
+           " ++ atom_to_list(?MODULE) ++":do_log(" ++ ModuleStr ++ ", Action, Msg, ?BACKENDS);
+       log(Action, Variable) ->
+           log(Action, lists:flatten(io_lib:format(\"~p\"))).
       ".
 
 
@@ -194,6 +223,17 @@ backends_records_to_str([Backend=#file_backend{}|Rest] , String) ->
     TupleStr =
 	"{ " ++ atom_to_list(Backend#file_backend.name) ++ ", " ++
  	lists:flatten(io_lib:format("~p", [Backend#file_backend.level])) ++
+	"}",
+    case Rest of
+	[] -> String ++ TupleStr;
+	Rest -> 
+	    backends_records_to_str(Rest, String  ++ TupleStr ++ ", ")
+    end;
+
+backends_records_to_str([Backend=#ram_backend{}|Rest] , String) ->
+    TupleStr =
+	"{ " ++ atom_to_list(Backend#ram_backend.name) ++ ", " ++
+ 	lists:flatten(io_lib:format("~p", [Backend#ram_backend.level])) ++
 	"}",
     case Rest of
 	[] -> String ++ TupleStr;
@@ -230,7 +270,7 @@ backends_records_to_str([Backend=#console_backend{}|Rest] , String) ->
 add_handlers(LoggerName, BackendsRecords)->
     lists:foreach(
       fun(BackendRecord) ->
-	      ok = gen_event:add_handler(LoggerName, klogger_handler, [LoggerName, BackendRecord])
+	      ok = gen_event:add_handler(LoggerName, klogger_handler, [LoggerName, BackendRecord, []])
       end,
       BackendsRecords).
 
@@ -278,6 +318,12 @@ create_backend_record_list([{backend, BackendList}|Rest],Acc)->
 			#console_backend{name=Name,
 					 level=Level,
 					 get_error_logger=GetErLog},
+		    create_backend_record_list(Rest,[Record|Acc]);
+		ram_backend ->
+		    Record = 
+			#ram_backend{name=Name,
+				     level=Level,
+				     get_error_logger=GetErLog},
 		    create_backend_record_list(Rest,[Record|Acc]);
 		file_backend ->
 		    case proplists:get_value(path, BackendList) of 
