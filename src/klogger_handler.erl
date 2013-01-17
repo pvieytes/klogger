@@ -26,9 +26,11 @@
 
 -behaviour(gen_event).
 
--include_lib("klogger/include/klogger.hrl").
+-include("include/klogger.hrl").
+
 %% API
--export([get_error_logger/3
+-export([get_error_logger/3,
+	 transfer_ram/3
 	]).
 
 %% gen_event callbacks
@@ -37,13 +39,13 @@
 
 -define(SERVER, ?MODULE). 
 
-
 -record(state, {name,
 		level,
 		backend,
 		file=[],
 		get_error_logger=disable, 
-		logger_name}).
+		logger_name,
+		ram}).
 
 
 
@@ -62,6 +64,8 @@ get_error_logger(Logger, BackendName, Mode)->
     Logger ! {get_error_logger, BackendName, Mode}.
 
 
+transfer_ram(Logger,  BackendName, NewBackends)->
+    Logger ! {transfer_ram, Logger, BackendName, NewBackends}.
 
 %%%===================================================================
 %%% gen_event callbacks
@@ -76,7 +80,7 @@ get_error_logger(Logger, BackendName, Mode)->
 %% @spec init(Args) -> {ok, State}
 %% @end
 %%--------------------------------------------------------------------
-init([LoggerName, Backend=#file_backend{}]) ->
+init([LoggerName, Backend=#file_backend{}, PreviousData]) ->
     process_flag(trap_exit, true),
     case open_log_file(Backend#file_backend.path, LoggerName, Backend#file_backend.name) of
 	{ok, File} ->
@@ -86,17 +90,19 @@ init([LoggerName, Backend=#file_backend{}]) ->
 		_ ->
 		    ignore
 	    end,
-	    {ok, #state{name=Backend#file_backend.name,
+	    State = #state{name=Backend#file_backend.name,
 			level=Backend#file_backend.level,
 			backend=Backend,
 			get_error_logger=Backend#file_backend.get_error_logger,
 			logger_name=LoggerName,
-			file=File}};
+			file=File},
+	    transfer_previous_data(State, PreviousData),
+	    {ok, State};
 	{error, _} = E ->
 	    E
     end;
 
-init([LoggerName, Backend=#console_backend{}]) ->
+init([LoggerName, Backend=#console_backend{}, PreviousData]) ->
     process_flag(trap_exit, true),
     case Backend#console_backend.get_error_logger of
 	enable ->
@@ -104,13 +110,30 @@ init([LoggerName, Backend=#console_backend{}]) ->
 	_ ->
 	    ignore
     end,
-    {ok, #state{name=Backend#console_backend.name,
-		level=Backend#console_backend.level,
-		get_error_logger=Backend#console_backend.get_error_logger,
+    State =  #state{name=Backend#console_backend.name,
+		    level=Backend#console_backend.level,
+		    get_error_logger=Backend#console_backend.get_error_logger,
+		    logger_name=LoggerName,
+		    backend=Backend},
+    transfer_previous_data(State, PreviousData),
+    {ok, State};
+
+init([LoggerName, Backend=#ram_backend{}, _PreviousData]) ->
+    process_flag(trap_exit, true),
+    Ram = init_ram_storage(),
+
+    case Backend#ram_backend.get_error_logger of
+	enable ->
+	    klogger_integration_error_logger(LoggerName, Backend#ram_backend.get_error_logger);
+	_ ->
+	    ignore
+    end,
+    {ok, #state{name=Backend#ram_backend.name,
+		level=Backend#ram_backend.level,
+		get_error_logger=Backend#ram_backend.get_error_logger,
 		logger_name=LoggerName,
-		backend=Backend}}.
-
-
+		backend=Backend,
+		ram=Ram}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -176,6 +199,44 @@ handle_info({get_error_logger, BackendName, Mode}, State=#state{name=BackendName
 	    {ok, State#state{get_error_logger=Mode}}
     end;
 
+handle_info({transfer_ram, LoggerName, BackendName, NewBackends}, State=#state{name=BackendName}) ->
+    case State#state.backend of
+	_B = #ram_backend{} ->
+	    case klogger_log:create_backend_record_list(NewBackends) of
+		{error, _}->
+		    do_nothing;
+		BackendsRecords ->
+		    Data = pop_all_elements_ram_storage(State#state.ram),
+		    lists:foreach(
+		      fun(BackendRecord) ->
+			      spawn(
+				fun() -> 
+					gen_event:add_handler(LoggerName, 
+							      klogger_handler, 
+							      [LoggerName, BackendRecord, Data])
+				end)
+		      end,
+		      BackendsRecords),
+		    destroy_ram_storage(State#state.ram)
+	    end;
+	_ ->
+	    ignore
+    end,
+    %%TODO how to erase the instace??
+    {ok, []};
+
+handle_info(debug_show_ram, State) ->
+    io:format("show ram~n"),
+    case State#state.backend of
+	_B = #ram_backend{} ->	    
+	    lists:foreach(
+	      fun({ActionCode, Bin}) -> io:format("{~p, ~p}~n", [ActionCode, binary_to_term(Bin)]) end,
+	    	  read_all_elements_ram_storage(State#state.ram));
+	_ ->
+	    ignore
+    end,	    
+    {ok, State};
+
 handle_info(_Info, State) ->
     {ok, State}.
 
@@ -200,9 +261,14 @@ terminate(_Reason, State) ->
 	_Backend = #file_backend{} ->  
 	    %% close file
 	    close_log_file(State#state.file);
+	_Backend = #ram_backend{} ->  
+	    to_do;%%show info
 	_ ->
 	    ok
     end,
+    Logger = State#state.logger_name,
+    code:delete(Logger),
+    code:purge(Logger),
     ok.
 
 %%--------------------------------------------------------------------
@@ -228,13 +294,14 @@ log(ActionCode, Msg, TimeStamp, State) ->
 	_Backend = #file_backend{} ->
 	    write_msg_on_disk(State#state.file, LogMsg);
 	_Backend = #console_backend{} ->
-	    io:format("~s~n", [LogMsg])
+	    io:format("~s~n", [LogMsg]);
+	_Backend = #ram_backend{} ->
+	    write_msg_on_ram(LogMsg, ActionCode, State#state.ram)
     end.
 
 manage_error_logger_event(Event, State) ->
     case Event of
-	{Error, _, Data} when Error == error; 
-			      Error == error_report  ->
+	{Error, _, Data} when Error == error ->
 	    if 
 		State#state.level >= ?ERROR ->
 		    Msg = create_error_logger_msg(Data),
@@ -242,8 +309,7 @@ manage_error_logger_event(Event, State) ->
 		true -> 
 		    ok
 	    end;
-	{Warning, _, Data} when Warning == warning_msg; 
-				Warning == warning_report ->
+	{Warning, _, Data} when Warning == warning_msg ->
 	    if 
 		State#state.level >= ?WARNING ->
 		    Msg = create_error_logger_msg(Data),
@@ -251,8 +317,7 @@ manage_error_logger_event(Event, State) ->
 		true -> 
 		    ok
 	    end;
-	{Info, _, Data} when Info == info_msg; 
-			     Info == info_report ->
+	{Info, _, Data} when Info == info_msg ->
 	    if 
 		State#state.level >= ?INFO ->
 		    Msg = create_error_logger_msg(Data),
@@ -266,22 +331,26 @@ manage_error_logger_event(Event, State) ->
     end.
 
 create_error_logger_msg(Data) ->
-    Spaces = "             ",
-    case Data of
-    	{_, Std, List} when 
-    	      Std == std_error;
-    	      Std == std_warning;
-    	      Std == std_info ->
-    	    lists:foldl(
-    	      fun({F, D}, Acc) ->
-    		      Acc ++ lists:flatten(io_lib:format("~n~s~p: ~p", [Spaces, F, D]));
-    		 (Term, Acc) -> 
-    		      Acc ++  lists:flatten(io_lib:format("~n~s~p", [Spaces, Term]))
-    	      end,
-    	      "",
-    	      List);
-    	{_, F, D} ->
-    	    lists:flatten(io_lib:format(F, D))
+    try 
+	Spaces = "             ",
+	case Data of
+	    {_, Std, List} when 
+		  Std == std_error;
+		  Std == std_warning;
+		  Std == std_info ->
+		lists:foldl(
+		  fun({F, D}, Acc) ->
+			  Acc ++ lists:flatten(io_lib:format("~n~s~p: ~p", [Spaces, F, D]));
+		     (Term, Acc) -> 
+			  Acc ++  lists:flatten(io_lib:format("~n~s~p", [Spaces, Term]))
+		  end,
+		  "",
+		  List);
+	    {_, F, D} ->
+		lists:flatten(io_lib:format(F, D))
+	end
+    catch _:_ ->
+	    lists:flatten(io_lib:format("~p", [Data]))
     end.
 
 
@@ -293,7 +362,6 @@ klogger_integration_error_logger(Logger, enable) ->
 	true->
 	    error_logger ! {add_klogger, Logger};
 	false ->
-	    error_logger:tty(false),
 	    gen_event:add_handler(error_logger, 
 				  error_logger_klogger_handler, 
 				  [Logger])
@@ -303,7 +371,27 @@ klogger_integration_error_logger(Logger, disable) ->
     error_logger ! {delete_klogger, Logger}.
 
 
-
+transfer_previous_data(State, Data) ->
+    case Data of
+	[]->
+	    ignore;
+	Data ->
+	    Level = State#state.level,
+	    FLog = 
+		case State#state.backend of
+		    _Backend = #file_backend{} ->
+			fun(LMsg) -> write_msg_on_disk(State#state.file, LMsg) end;
+		    _Backend = #console_backend{} ->
+			fun(LMsg) -> io:format("~s~n", [LMsg]) end
+		end,   
+	    lists:foreach(
+	      fun({ActionCode, BinData}) when ActionCode =< Level ->
+		      FLog(binary_to_term(BinData));
+		 (_) ->
+		      ignore
+	      end,
+	      Data)
+    end.
 
 %%%===================================================================
 %%% File backend - Internal functions
@@ -328,3 +416,39 @@ write_msg_on_disk(Log, LogMsg)->
 
 close_log_file(Log) ->
     disk_log:close(Log).
+
+
+%% ram log 
+%%=========================================
+init_ram_storage() ->
+    Tab = ets:new(ram, [ordered_set, private]),
+    ets:insert(Tab, {index, 1}),
+    Tab.
+
+destroy_ram_storage(Tab) ->
+    ets:delete(Tab).
+
+read_all_elements_ram_storage(Tab) ->
+    read_all_elements_ram_storage(ets:last(Tab), Tab, []).
+
+read_all_elements_ram_storage('$end_of_table', _Tab, Acc)->
+    Acc;
+
+read_all_elements_ram_storage(Key, Tab, Acc)->
+    case ets:lookup(Tab, Key) of
+	[{index,_}]->
+	    read_all_elements_ram_storage(ets:prev(Tab, Key), Tab, Acc);  
+	[{_, LogCodem, LogsgBin}] ->
+	    read_all_elements_ram_storage(ets:prev(Tab, Key), Tab, [{LogCodem, LogsgBin}|Acc])
+    end.  
+ 
+pop_all_elements_ram_storage(Tab) ->
+    Elements = read_all_elements_ram_storage(Tab),
+    ets:delete_all_objects(Tab),
+    Elements.
+
+write_msg_on_ram(LogMsg, LogCode, Tab) -> 
+    [{index,Index}|_] = ets:lookup(Tab, index),
+    ets:insert_new(Tab, {Index, LogCode, term_to_binary(LogMsg)}),
+    ets:insert(Tab, {index, Index+1}).
+ 

@@ -24,7 +24,7 @@
 
 -module(klogger).
 
--include_lib("klogger/include/klogger.hrl").
+-include("include/klogger.hrl").
 
 %% API
 -export([start/0,
@@ -33,7 +33,9 @@
 	 add_logger/2,
 	 delete_logger/1,
 	 set_log_level/2,
-	 get_error_logger/3]).
+	 get_error_logger/3,
+	 transfer_ram/3,
+	 is_valid_log_code/1]).
 
 
 
@@ -155,4 +157,18 @@ get_error_logger(Logger, BackendName, Mode) ->
     end.
 
 		
+transfer_ram(Logger,  BackendName, NewBackend) when is_tuple(NewBackend) ->
+    transfer_ram(Logger,  BackendName, [NewBackend]);
 
+transfer_ram(Logger,  BackendName, NewBackends)->
+    klogger_handler:transfer_ram(Logger,  BackendName, NewBackends),
+    ok.
+
+
+is_valid_log_code(Code) ->
+    try
+	?LEVELCODE(Code),
+	true
+    catch _:_ ->
+	    false
+    end.

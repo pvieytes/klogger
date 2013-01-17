@@ -124,7 +124,6 @@ handle_info({delete_klogger, Logger}, State) ->
     	end,
     case UpdatedKloggers of
 	[] ->
-	    spawn(fun() -> error_logger:tty(true) end),
 	    remove_handler;
 	UpdatedKloggers ->
 	    {ok, State#state{kloggers= UpdatedKloggers}}

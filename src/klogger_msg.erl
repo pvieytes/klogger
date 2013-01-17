@@ -24,7 +24,7 @@
 
 -module(klogger_msg).
 
--include_lib("klogger/include/klogger.hrl").
+-include("include/klogger.hrl").
 
 -export([create_log_msg/3]).
 

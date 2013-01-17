@@ -29,7 +29,6 @@
 -define(FATAL, 1).
 -define(NONE, 0).
 
-
 -define(LEVELCODE(L),
 	case L of
 	    debug -> ?DEBUG;
@@ -42,10 +41,6 @@
 		L		
 	end).
 
-
-
-
-
 -record(file_backend, {name, 
 		       level,
 		       path,
@@ -54,4 +49,8 @@
 -record(console_backend, {name,
 			  level,
 			  get_error_logger=disable}).
+
+-record(ram_backend, {name,
+		      level,
+		      get_error_logger=disable}).
 
